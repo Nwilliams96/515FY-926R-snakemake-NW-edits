@@ -2,11 +2,27 @@ This workflow is in progress, and not yet ready for production...
 
 Please continue to use the bash workflow until otherwise indicated on the base README.
 
+## Requirements
+
+Install [Git](https://git-scm.com/downloads) and
+[Conda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/),
+then create an isolated Snakemake controller environment following the
+[official Snakemake installation guidance](https://snakemake.readthedocs.io/en/latest/getting_started/installation.html):
+
+```bash
+conda create --name snakemake --channel conda-forge --channel bioconda snakemake
+conda activate snakemake
+snakemake --version
+```
+
+Run this workflow with `--use-conda`. On the first run, Snakemake downloads and
+creates the rule-specific QIIME 2, R, BLAST, BBMap, and utility environments.
+Subsequent runs reuse them.
+
 Instructions for Nathan:
 
-1. Install latest version of snakemake via conda, making sure to do the full snakemake install instead of "minimal"
-[Snakemake install instructions](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html)
-2. Activate snakemake conda env
+1. Install the requirements above, using the full Snakemake package rather than `snakemake-minimal`.
+2. Activate the Snakemake Conda environment.
 ```
 conda activate snakemake
 ```
