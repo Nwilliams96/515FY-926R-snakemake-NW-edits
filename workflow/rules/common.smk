@@ -35,6 +35,29 @@ PR2_CLASSIFIER = os.path.join(
     + "_dereplicated_final_classifier_USE_ME.qza",
 )
 
+# Small, user-facing files copied into one folder at the end of the run.
+RESULTS_EXPORT_INPUTS = [
+    "results/04-formatted/" + config["studyName"] + ".long_data.tsv",
+    "results/04-formatted/" + config["studyName"] + ".asv_sequences.tsv",
+    "results/07-report/" + config["studyName"] + ".pipeline-report.html",
+]
+RESULTS_EXPORT_OUTPUTS = [
+    "Results-Export/" + config["studyName"] + ".long_data.tsv",
+    "Results-Export/" + config["studyName"] + ".asv_sequences.tsv",
+    "Results-Export/" + config["studyName"] + ".pipeline-report.html",
+]
+if USE_INTERNAL_STANDARDS:
+    RESULTS_EXPORT_INPUTS.append(
+        "results/05-internal-std-corrected/"
+        + config["studyName"]
+        + ".ISD_corrected_asv_table.tsv"
+    )
+    RESULTS_EXPORT_OUTPUTS.append(
+        "Results-Export/"
+        + config["studyName"]
+        + ".ISD_corrected_asv_table.tsv"
+    )
+
 # read sample sheet
 samples = (
     pd.read_csv(config["samplesheet"], sep="\t", dtype={"sample": str})
@@ -93,6 +116,9 @@ def get_final_output():
             + config["studyName"]
             + ".ISD_corrected_asv_table.tsv"
         )
+
+    final_output.extend(RESULTS_EXPORT_OUTPUTS)
+    final_output.append("Results-Export/README.txt")
 
     return final_output
 

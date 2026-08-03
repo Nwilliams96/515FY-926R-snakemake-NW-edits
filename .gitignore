@@ -5,6 +5,7 @@ workflow/wrappers/
 
 # Results and logs
 results/
+Results-Export/
 logs/
 log/
 slurm-*.out
@@ -44,4 +45,3 @@ structure.txt
 *.tmp
 .Rhistory
 .DS_Store
-

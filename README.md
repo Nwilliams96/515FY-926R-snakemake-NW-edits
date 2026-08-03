@@ -49,5 +49,9 @@ domain composition, abundant taxa, and—when enabled—the internal-standard
 figures. The report is intended for rapid review; retain the complete results
 directory and QIIME 2 visualizations for detailed analysis.
 
+For convenient downloading, the workflow also copies the report and formatted
+data tables into the top-level `Results-Export/` folder. When internal standards
+are enabled, the corrected ASV table is included there as well.
+
 For your reference, in case the above commands are incomplete:
 https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm.html#usage
