@@ -1,0 +1,47 @@
+# Snakemake runtime files
+.snakemake/
+.wrapper_paths.txt
+workflow/wrappers/
+
+# Results and logs
+results/
+logs/
+log/
+slurm-*.out
+*.err
+
+# Raw sequence data
+data/
+raw_data/
+raw-data/
+reads/
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+
+# Databases and downloaded resources
+databases/
+database/
+resources/
+*.qza
+*.qzv
+*.biom
+
+# Study-specific inputs
+config/config.yml
+config/*.tsv
+config/intstd_fastas/
+
+# Generated ProPortal files
+workflow/scripts/ProPortal-ASV-Annotation/*QC_summary.txt
+workflow/scripts/ProPortal-ASV-Annotation/not-found.txt
+
+# Temporary files
+structure.txt
+*.bak
+*.swp
+*.tmp
+.Rhistory
+.DS_Store
+
