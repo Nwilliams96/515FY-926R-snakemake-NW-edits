@@ -1,6 +1,40 @@
 # import basic packages
+import os
 import pandas as pd
 from snakemake.utils import validate
+
+# Resolve optional workflow branches and database locations once so every rule
+# uses the same paths. Database-building rules always write to the repository's
+# local databases/ directory; prebuilt databases may live anywhere.
+USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
+USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
+
+DATABASE_DIR = os.path.normpath(
+    config["database_dir"] if USE_PREEXISTING_DATABASES else "databases"
+)
+BBSPLIT_DB_DIR = os.path.join(
+    DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db"
+)
+SILVA_CLASSIFIER = os.path.join(
+    DATABASE_DIR,
+    "classification",
+    "SILVA",
+    "silva-ssu-nr99-tax-dereplicated-sliced_"
+    + config["fwdPrimer"]
+    + "_"
+    + config["revPrimer"]
+    + "_dereplicated_final_classifier_USE_ME.qza",
+)
+PR2_CLASSIFIER = os.path.join(
+    DATABASE_DIR,
+    "classification",
+    "PR2",
+    "pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_"
+    + config["fwdPrimer"]
+    + "_"
+    + config["revPrimer"]
+    + "_dereplicated_final_classifier_USE_ME.qza",
+)
 
 # read sample sheet
 samples = (
@@ -18,11 +52,9 @@ def get_final_output():
         #sample=samples["sample"], direction=["1","2"]
     )
 
-    final_output.append("databases/bbsplit-db/SILVA_132_PROK.cdhit95pc.fasta"),
-    final_output.append("databases/bbsplit-db/SILVA_132_and_PR2_EUK.cdhit95pc.fasta"),
-    final_output.append("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"),
-    final_output.append(directory("databases/bbsplit-db/EUK-PROK-bbsplit-db/")),
-    final_output.append("databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"),
+    final_output.extend(
+        [directory(BBSPLIT_DB_DIR), SILVA_CLASSIFIER, PR2_CLASSIFIER]
+    )
 #    final_output.append("results/02-proks/manifest.tsv"),
     final_output.append("results/02-proks/16S.qza"),
     final_output.append(directory("results/02-proks/02-quality-plots-R1-R2/")),
@@ -53,9 +85,12 @@ def get_final_output():
     final_output.append("results/03-merged/" + config["studyName"] + ".merged_uncorrected.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".Synechococcales.proportal-classified.tsv"),
     final_output.append("results/04-formatted/" + config["studyName"] + ".long_data.tsv"),
-    final_output.append("config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta.nhr"),
-    final_output.append("config/intstd_fastas/" + config["intstds"]["intstd1"] + ".asvs.txt"),
-    final_output.append("results/05-internal-std-corrected/" + config["studyName"] + ".ISD_corrected_asv_table.tsv")
+    if USE_INTERNAL_STANDARDS:
+        final_output.append(
+            "results/05-internal-std-corrected/"
+            + config["studyName"]
+            + ".ISD_corrected_asv_table.tsv"
+        )
 
     return final_output
 

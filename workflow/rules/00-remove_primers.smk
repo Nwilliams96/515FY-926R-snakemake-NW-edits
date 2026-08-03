@@ -1,8 +1,11 @@
 rule cutadapt:
     input:
-        [config["rawdatadir"] + "{sample}" + config["R1file_ending"],
-        config["rawdatadir"] + "{sample}" + config["R2file_ending"]]
-        #"nativemicrobiota/ocean-data/{sample}.R2.head400.fastq.gz"],
+        r1=lambda wildcards: os.path.join(
+            config["rawdatadir"], wildcards.sample + config["R1file_ending"]
+        ),
+        r2=lambda wildcards: os.path.join(
+            config["rawdatadir"], wildcards.sample + config["R2file_ending"]
+        )
     output:
         fastq1=temp("results/00-trimmed/{sample}.1.fastq"),
         fastq2=temp("results/00-trimmed/{sample}.2.fastq"),

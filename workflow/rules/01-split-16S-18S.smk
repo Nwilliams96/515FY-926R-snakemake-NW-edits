@@ -1,6 +1,6 @@
 rule bbsplit_prok_euk:
     input:
-        database=directory("databases/bbsplit-db/EUK-PROK-bbsplit-db/"),
+        database=directory(BBSPLIT_DB_DIR),
         r1="results/00-trimmed/{sample}.1.fastq",
         r2="results/00-trimmed/{sample}.2.fastq"
     output:

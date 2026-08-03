@@ -10,6 +10,9 @@ library(tidyverse)
 isd_path  <- snakemake@input[["isd"]]
 isd_added_path <- snakemake@input[["isd_added"]]
 cruise_tag <- snakemake@config[["studyName"]]
+isd_1_id <- snakemake@params[["intstd1name"]]
+isd_2_id <- snakemake@params[["intstd2name"]]
+isd_3_id <- snakemake@params[["intstd3name"]]
 outdir <- "results/05-internal-std-corrected"
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 figure_dir <- "results/06-figures"
@@ -25,9 +28,9 @@ isd <- read_tsv(isd_path , show_col_types = FALSE)
 isd_added <- read_tsv(isd_added_path, show_col_types = FALSE) %>%
   rename(
     SampleID = sample,
-    isd_1_ng = BP_ng,
-    isd_2_ng = DR_ng,
-    isd_3_ng = TT_ng
+    isd_1_ng = all_of(paste0(isd_1_id, "_ng")),
+    isd_2_ng = all_of(paste0(isd_2_id, "_ng")),
+    isd_3_ng = all_of(paste0(isd_3_id, "_ng"))
   ) %>%
   mutate(SampleID = str_replace_all(SampleID, "_", "-"))
 samples <- isd_added
@@ -47,13 +50,13 @@ bp_weight <- 617.9
 avogadro <- 6.022 * 1e23
 # 1e9 is to convert to copies added per L.
 
-isd_1len=isd$genome_len_bp[isd$internal_std_ID == "BP"]
-isd_2len=isd$genome_len_bp[isd$internal_std_ID == "DR"]
-isd_3len=isd$genome_len_bp[isd$internal_std_ID == "TT"]
+isd_1len=isd$genome_len_bp[isd$internal_std_ID == isd_1_id]
+isd_2len=isd$genome_len_bp[isd$internal_std_ID == isd_2_id]
+isd_3len=isd$genome_len_bp[isd$internal_std_ID == isd_3_id]
 
-isd_1copynum=isd$rRNA_copy_number[isd$internal_std_ID == "BP"]
-isd_2copynum=isd$rRNA_copy_number[isd$internal_std_ID == "DR"]
-isd_3copynum=isd$rRNA_copy_number[isd$internal_std_ID == "TT"]
+isd_1copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_1_id]
+isd_2copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_2_id]
+isd_3copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_3_id]
 
 # Do calculation
 isd_copies_added <- isd_added %>% 

@@ -1,38 +1,45 @@
-## Workflow overview
+# Workflow configuration
 
-This workflow is a best-practice workflow for `<detailed description>`.
-The workflow is built using [snakemake](https://snakemake.readthedocs.io/en/stable/) and consists of the following steps:
+Place the tutorial-generated configuration package in this directory. The
+workflow loads `config/config.yml` and expects `config/samples.tsv` and
+`config/bioanalyzer.tsv`.
 
-1. Download genome reference from NCBI
-2. Validate downloaded genome (`python` script)
-3. Simulate short read sequencing data on the fly (`dwgsim`)
-4. Check quality of input read data (`FastQC`)
-5. Collect statistics from tool output (`MultiQC`)
+## Database setup
 
-## Running the workflow
+Set `use_preexisting_databases: false` to let the workflow download and train
+its databases under the repository-local `databases/` directory.
 
-### Input data
+Set `use_preexisting_databases: true` to skip all database download and
+training rules. In that mode, `database_dir` must point to a database root with
+this structure:
 
-This template workflow creates artificial sequencing data in `*.fastq.gz` format.
-It does not contain actual input data.
-The simulated input files are nevertheless created based on a mandatory table linked in the `config.yml` file (default: `.test/samples.tsv`).
-The sample sheet has the following layout:
+```text
+database_dir/
+  bbsplit-db/
+    EUK-PROK-bbsplit-db/
+  classification/
+    PR2/
+      pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_<forward>_<reverse>_dereplicated_final_classifier_USE_ME.qza
+    SILVA/
+      silva-ssu-nr99-tax-dereplicated-sliced_<forward>_<reverse>_dereplicated_final_classifier_USE_ME.qza
+```
 
-| sample  | condition | replicate | read1                      | read2                      |
-| ------- | --------- | --------- | -------------------------- | -------------------------- |
-| sample1 | wild_type | 1         | sample1.bwa.read1.fastq.gz | sample1.bwa.read2.fastq.gz |
-| sample2 | wild_type | 2         | sample2.bwa.read1.fastq.gz | sample2.bwa.read2.fastq.gz |
+The `<forward>` and `<reverse>` portions must match `fwdPrimer` and
+`revPrimer` in `config.yml`.
 
-### Parameters
+## Internal standards
 
-This table lists all parameters that can be used to run the workflow.
+Set `use_internal_standards: false` to omit internal-standard correction.
 
-| parameter          | type | details                               | default                        |
-| ------------------ | ---- | ------------------------------------- | ------------------------------ |
-| **samplesheet**    |      |                                       |                                |
-| path               | str  | path to samplesheet, mandatory        | "config/samples.tsv"           |
-| **get_genome**     |      |                                       |                                |
-| ncbi_ftp           | str  | link to a genome on NCBI's FTP server | link to _S. cerevisiae_ genome |
-| **simulate_reads** |      |                                       |                                |
-| read_length        | num  | length of target reads in bp          | 100                            |
-| read_number        | num  | number of total reads to be simulated | 10000                          |
+When it is `true`, provide exactly three IDs under `intstds`, include matching
+`<ID>_ng` columns in `samples.tsv`, and provide `config/internal_stds.tsv` with
+these columns:
+
+```text
+internal_std_ID	rRNA_copy_number	genome_len_bp	full_16S_sequence
+```
+
+The workflow creates the required FASTA and BLAST database files from that
+table automatically.
+
+See `config.example.yml` for a complete configuration example.

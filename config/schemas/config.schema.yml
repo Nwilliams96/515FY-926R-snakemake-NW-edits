@@ -1,9 +1,85 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-description: main configuration schema for the workflow
+description: Configuration schema for the universal amplicon workflow
+type: object
 properties:
   samplesheet:
     type: string
-    description: path to sample-sheet TSV file
-
+  studyName:
+    type: string
+    minLength: 1
+  use_preexisting_databases:
+    type: boolean
+  database_dir:
+    type: string
+    minLength: 1
+  rawdatadir:
+    type: string
+    minLength: 1
+  R1file_ending:
+    type: string
+    minLength: 1
+  R2file_ending:
+    type: string
+    minLength: 1
+  use_internal_standards:
+    type: boolean
+  intstds:
+    type: object
+    properties:
+      intstd1:
+        type: string
+        minLength: 1
+      intstd2:
+        type: string
+        minLength: 1
+      intstd3:
+        type: string
+        minLength: 1
+    required: [intstd1, intstd2, intstd3]
+  trunclens:
+    type: object
+    properties:
+      truncR1:
+        type: integer
+        minimum: 1
+      truncR2:
+        type: integer
+        minimum: 1
+    required: [truncR1, truncR2]
+  fwdPrimer:
+    type: string
+    minLength: 1
+  revPrimer:
+    type: string
+    minLength: 1
+  qiime2version:
+    type: string
+    minLength: 1
+  SILVAversion:
+    type: [string, number]
 required:
   - samplesheet
+  - studyName
+  - use_preexisting_databases
+  - rawdatadir
+  - R1file_ending
+  - R2file_ending
+  - use_internal_standards
+  - trunclens
+  - fwdPrimer
+  - revPrimer
+  - qiime2version
+  - SILVAversion
+allOf:
+  - if:
+      properties:
+        use_preexisting_databases:
+          const: true
+    then:
+      required: [database_dir]
+  - if:
+      properties:
+        use_internal_standards:
+          const: true
+    then:
+      required: [intstds]
