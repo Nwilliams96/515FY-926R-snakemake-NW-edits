@@ -20,9 +20,9 @@ class PrepareInternalStandardFastasTest(unittest.TestCase):
             table = root / "internal_stds.tsv"
             table.write_text(
                 "internal_std_ID\trRNA_copy_number\tgenome_len_bp\tfull_16S_sequence\n"
-                "BP\t5\t100\tACGT\n"
-                "DR\t2\t200\tNNAA\n"
-                "TT\t1\t300\tRYGC\n",
+                "Custom-A\t5\t100\tACGT\n"
+                "Custom_B\t2\t200\tNNAA\n"
+                "SpikeIn3\t1\t300\tRYGC\n",
                 encoding="utf-8",
             )
             outputs = {
@@ -33,9 +33,9 @@ class PrepareInternalStandardFastasTest(unittest.TestCase):
                 input=[str(table)],
                 output=outputs,
                 params={
-                    "intstd1name": "BP",
-                    "intstd2name": "DR",
-                    "intstd3name": "TT",
+                    "intstd1name": "Custom-A",
+                    "intstd2name": "Custom_B",
+                    "intstd3name": "SpikeIn3",
                 },
             )
 
@@ -43,11 +43,11 @@ class PrepareInternalStandardFastasTest(unittest.TestCase):
 
             self.assertEqual(
                 (root / "intstd1.fasta").read_text(encoding="utf-8"),
-                ">BP\nACGT\n",
+                ">Custom-A\nACGT\n",
             )
             self.assertEqual(
                 (root / "intstd2.fasta").read_text(encoding="utf-8"),
-                ">DR\nNNAA\n",
+                ">Custom_B\nNNAA\n",
             )
 
 

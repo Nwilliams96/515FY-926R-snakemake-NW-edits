@@ -12,9 +12,9 @@ R2file_ending: ".R2.fastq.gz"
 
 use_internal_standards: false
 intstds:
-  intstd1: "BP"
-  intstd2: "DR"
-  intstd3: "TT"
+  intstd1: "ISD_1"
+  intstd2: "ISD_2"
+  intstd3: "ISD_3"
 
 trunclens:
   truncR1: 220

@@ -13,6 +13,7 @@ cruise_tag <- snakemake@config[["studyName"]]
 isd_1_id <- snakemake@params[["intstd1name"]]
 isd_2_id <- snakemake@params[["intstd2name"]]
 isd_3_id <- snakemake@params[["intstd3name"]]
+configured_standard_names <- paste(c(isd_1_id, isd_2_id, isd_3_id), collapse = ", ")
 outdir <- "results/05-internal-std-corrected"
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 figure_dir <- "results/06-figures"
@@ -124,15 +125,28 @@ plot_data <- merged_isd_data %>%
 means_df <- plot_data %>% filter(Method %in% c("recovery_mean")) %>%
   distinct(SampleID, Recovery)
 
+# Use the configured standard names in figure legends instead of slot numbers.
+plot_data <- plot_data %>%
+  mutate(Method = recode(
+    Method,
+    "isd_1_recovery_ratio" = paste0(isd_1_id, " only"),
+    "isd_2_recovery_ratio" = paste0(isd_2_id, " only"),
+    "isd_3_recovery_ratio" = paste0(isd_3_id, " only"),
+    "recovery_mean" = "Mean of all three standards",
+    "isd_1_isd_2_mean_recovery_ratio" = paste(isd_1_id, "+", isd_2_id),
+    "isd_1_isd_3_mean_recovery_ratio" = paste(isd_1_id, "+", isd_3_id),
+    "isd_2_isd_3_mean_recovery_ratio" = paste(isd_2_id, "+", isd_3_id)
+  ))
+
 #Generate a plot to compare ratios
 plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
   geom_point(position = position_jitter(width = 0.15, height = 0), size = 2.5) +
   geom_line(data = means_df, aes(x = SampleID, y = Recovery, group = 1),
             inherit.aes = FALSE, colour = "black", linewidth = 1) +
   theme_minimal() +
-  scale_colour_manual(values = c("Bacteria" = "#1F77B4", "Archaea" = "#2CA02C", "Eukaryota" = "#D62728", "Unassigned" = "#7F7F7F")) +
+  scale_colour_brewer(palette = "Dark2", name = "Correction method") +
   labs(title = "Recovery Ratios per Sample",
-       subtitle = "Dots = internal standards, Black line = per-sample mean",
+       subtitle = paste0("Configured standards: ", configured_standard_names, ". Black line = per-sample mean."),
        y = "Recovery Ratio",
        x = "Sample") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), legend.position = "bottom")
@@ -192,14 +206,14 @@ Domain_Totals_long <- Domain_Totals %>%
     values_to = "Total_Copies"
   ) %>%
   mutate(Method = recode(Method,
-                         "Total_isd_3_recovery_ratio" = "isd 3 recovery ratio",
-                         "Total_isd_1_recovery_ratio" = "isd 1 recovery ratio",
-                         "Total_isd_2_recovery_ratio" = "isd 2 recovery ratio",
-                         "Total_mean_recovery_ratio" = "mean recovery ratio",
-                         "Total_median_recovery_ratio" = "median recovery ratio",
-                         "Total_isd_1_isd_3_mean_recovery_ratio" = "isd 1 / isd 3 mean recovery ratio",
-                         "Total_isd_1_isd_2_mean_recovery_ratio" = "isd 1 / isd 2 mean recovery ratio",
-                         "Total_isd_2_isd_3_mean_recovery_ratio" = "isd 2 / isd 3 mean recovery ratio"))
+                         "Total_isd_3_recovery_ratio" = paste0(isd_3_id, " only"),
+                         "Total_isd_1_recovery_ratio" = paste0(isd_1_id, " only"),
+                         "Total_isd_2_recovery_ratio" = paste0(isd_2_id, " only"),
+                         "Total_mean_recovery_ratio" = paste0("Mean: ", configured_standard_names),
+                         "Total_median_recovery_ratio" = paste0("Median: ", configured_standard_names),
+                         "Total_isd_1_isd_3_mean_recovery_ratio" = paste(isd_1_id, "+", isd_3_id),
+                         "Total_isd_1_isd_2_mean_recovery_ratio" = paste(isd_1_id, "+", isd_2_id),
+                         "Total_isd_2_isd_3_mean_recovery_ratio" = paste(isd_2_id, "+", isd_3_id)))
 
 plot2 <- ggplot(
   Domain_Totals_long,

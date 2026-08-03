@@ -14,11 +14,27 @@ with open(snakemake.input[0], newline="", encoding="utf-8") as handle:
             "config/internal_stds.tsv is missing column(s): "
             + ", ".join(sorted(missing_columns))
         )
-    standards = {row["internal_std_ID"].strip(): row for row in reader}
+    standard_rows = list(reader)
+    standards = {row["internal_std_ID"].strip(): row for row in standard_rows}
+    if len(standards) != len(standard_rows):
+        raise ValueError("config/internal_stds.tsv contains duplicate internal_std_ID values")
 
 
-for slot in ("intstd1", "intstd2", "intstd3"):
-    standard_id = str(snakemake.params[f"{slot}name"]).strip()
+configured_ids = {
+    slot: str(snakemake.params[f"{slot}name"]).strip()
+    for slot in ("intstd1", "intstd2", "intstd3")
+}
+if len(set(configured_ids.values())) != 3:
+    raise ValueError("The three configured internal standard names must be unique")
+for standard_id in configured_ids.values():
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", standard_id):
+        raise ValueError(
+            f"Internal standard name {standard_id!r} may contain only letters, "
+            "numbers, periods, underscores, and hyphens"
+        )
+
+
+for slot, standard_id in configured_ids.items():
     if standard_id not in standards:
         raise ValueError(
             f"Internal standard {standard_id!r} is configured as {slot} but is "

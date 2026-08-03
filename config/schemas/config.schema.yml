@@ -29,12 +29,15 @@ properties:
       intstd1:
         type: string
         minLength: 1
+        pattern: "^[A-Za-z0-9._-]+$"
       intstd2:
         type: string
         minLength: 1
+        pattern: "^[A-Za-z0-9._-]+$"
       intstd3:
         type: string
         minLength: 1
+        pattern: "^[A-Za-z0-9._-]+$"
     required: [intstd1, intstd2, intstd3]
   trunclens:
     type: object

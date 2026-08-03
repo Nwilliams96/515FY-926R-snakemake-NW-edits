@@ -44,6 +44,8 @@ internal_std_ID	rRNA_copy_number	genome_len_bp	full_16S_sequence
 ```
 
 The workflow creates the required FASTA and BLAST database files from that
-table automatically.
+table automatically. IDs may contain letters, numbers, periods, underscores,
+and hyphens. The configured IDs are also printed in the recovery-plot legend
+and correction-method facet labels.
 
 See `config.example.yml` for a complete configuration example.
