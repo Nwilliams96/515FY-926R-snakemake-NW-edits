@@ -36,9 +36,14 @@ TARGET="${1:-}"
 # - --use-conda: create/use conda envs declared in workflow
 # - --rerun-incomplete: pick up partial outputs
 # - --latency-wait: wait for N seconds when a file appears missing on shared filesystems
-snakemake --cores 1 --use-conda --rerun-incomplete --latency-wait 60 ${TARGET}
+snakemake \
+  --snakefile workflow/Snakefile \
+  --cores 1 \
+  --use-conda \
+  --rerun-incomplete \
+  --latency-wait 60 \
+  ${TARGET}
 rc=$?
 
 echo "Snakemake finished with exit code ${rc} at: $(date)"
 exit ${rc}
-
