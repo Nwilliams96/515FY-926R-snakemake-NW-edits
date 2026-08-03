@@ -69,7 +69,9 @@ if USE_INTERNAL_STANDARDS:
             isd_1_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_1_isd_3_mean_recovery_ratio.tsv",
             isd_2_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_2_isd_3_mean_recovery_ratio.tsv",
             recovery_plot="results/06-figures/" + config["studyName"] + ".recovery_ratios.pdf",
-            domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf"
+            domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf",
+            recovery_plot_png="results/06-figures/" + config["studyName"] + ".recovery_ratios.png",
+            domain_plot_png="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.png"
         conda:
             "../envs/r-tidyverse-2.0.0.yml"
         log:

@@ -35,5 +35,19 @@ snakemake --executor slurm --default-resources --jobs N #replacing "N" with the 
 snakemake --use-conda --executor slurm --default-resources --jobs N
 ```
 
+## Run report
+
+The final workflow target creates a self-contained report at:
+
+```text
+results/07-report/<studyName>.pipeline-report.html
+```
+
+Open that file in a web browser for a concise summary of the configuration,
+read retention through trimming, 16S/18S splitting and DADA2, sample-level QC,
+domain composition, abundant taxa, and—when enabled—the internal-standard
+figures. The report is intended for rapid review; retain the complete results
+directory and QIIME 2 visualizations for detailed analysis.
+
 For your reference, in case the above commands are incomplete:
 https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/slurm.html#usage

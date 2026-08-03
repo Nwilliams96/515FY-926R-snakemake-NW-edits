@@ -287,3 +287,11 @@ dev.off()
 pdf(snakemake@output[["domain_plot"]], width = 12, height = 8)
 print(plot2)
 dev.off()
+
+# PNG copies are embedded directly in the final self-contained HTML report.
+png(snakemake@output[["recovery_plot_png"]], width = 1800, height = 900, res = 150)
+print(plot1)
+dev.off()
+png(snakemake@output[["domain_plot_png"]], width = 1800, height = 1200, res = 150)
+print(plot2)
+dev.off()

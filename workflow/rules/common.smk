@@ -84,6 +84,9 @@ def get_final_output():
     final_output.append("results/03-merged/" + config["studyName"] + ".merged_uncorrected.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".Synechococcales.proportal-classified.tsv"),
     final_output.append("results/04-formatted/" + config["studyName"] + ".long_data.tsv"),
+    final_output.append(
+        "results/07-report/" + config["studyName"] + ".pipeline-report.html"
+    )
     if USE_INTERNAL_STANDARDS:
         final_output.append(
             "results/05-internal-std-corrected/"
