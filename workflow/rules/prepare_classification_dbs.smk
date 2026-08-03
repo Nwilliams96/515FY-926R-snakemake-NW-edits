@@ -3,8 +3,8 @@
 
 rule download_SILVA:
     output:
-        seqs=temp("databases/classification/SILVA/silva-ssu-nr99-rna-seqs.qza"),
-        taxonomy=temp("databases/classification/SILVA/silva-ssu-nr99-tax.qza")
+        seqs=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-rna-seqs.qza"),
+        taxonomy=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax.qza")
     params:
         SILVAversion=config["SILVAversion"]
     log:
@@ -17,9 +17,9 @@ rule download_SILVA:
 
 rule reverse_transcribe:
     input:
-        "databases/classification/SILVA/silva-ssu-nr99-rna-seqs.qza"
+        DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-rna-seqs.qza"
     output:
-        temp("databases/classification/SILVA/silva-ssu-nr99-dna-seqs.qza")
+        temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs.qza")
     log:
         "logs/SILVA_classification_db_prep_reverse_transcribe.log"
     priority: 49
@@ -30,9 +30,9 @@ rule reverse_transcribe:
 
 rule qc_seqs_cull:
     input:
-        rawDNA="databases/classification/SILVA/silva-ssu-nr99-dna-seqs.qza"
+        rawDNA=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs.qza"
     output:
-        cleanDNA=temp("databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled.qza")
+        cleanDNA=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled.qza")
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_cull.log"
     priority: 48
@@ -43,11 +43,11 @@ rule qc_seqs_cull:
 
 rule qc_seqs_filter:
     input:
-        cleanDNA="databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled.qza",
-        taxonomy="databases/classification/SILVA/silva-ssu-nr99-tax.qza"
+        cleanDNA=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled.qza",
+        taxonomy=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax.qza"
     output:
-        filteredDNA=temp("databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered.qza"),
-        discardedDNA=temp("databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled-discarded.qza")
+        filteredDNA=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered.qza"),
+        discardedDNA=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled-discarded.qza")
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_filter.log"
     priority: 47
@@ -58,11 +58,11 @@ rule qc_seqs_filter:
 
 rule qc_seqs_dereplicate:
     input:
-        filteredDNA="databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered.qza",
-        taxonomy="databases/classification/SILVA/silva-ssu-nr99-tax.qza"
+        filteredDNA=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered.qza",
+        taxonomy=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax.qza"
     output:
-        dereplicatedDNA=temp("databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered-dereplicated.qza"),
-        dereplicatedTaxa=temp("databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated.qza")
+        dereplicatedDNA=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered-dereplicated.qza"),
+        dereplicatedTaxa=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated.qza")
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_dereplicate.log"
     priority: 46
@@ -73,12 +73,12 @@ rule qc_seqs_dereplicate:
 
 rule extract_primers:
     input:
-        dereplicatedDNA="databases/classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered-dereplicated.qza"
+        dereplicatedDNA=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-dna-seqs-culled-filtered-dereplicated.qza"
     params:
         fwdPrimer=config["fwdPrimer"],
         revPrimer=config["revPrimer"]
     output:
-        slicedDNA=temp("databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza")
+        slicedDNA=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza")
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_extract_primers.log"
     priority: 45
@@ -90,10 +90,10 @@ rule extract_primers:
 rule dereplicated_sliced_data:
     input:
         slicedDNA=rules.extract_primers.output.slicedDNA,
-        dereplicatedTaxa="databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated.qza"
+        dereplicatedTaxa=DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated.qza"
     output:
-        slicedDNAdereplicated=temp("databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated.qza"),
-        dereplicatedTaxaSliced=temp("databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated.qza")
+        slicedDNAdereplicated=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated.qza"),
+        dereplicatedTaxaSliced=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated.qza")
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_dereplicate_sliced_data.log"
     priority: 44
@@ -107,7 +107,7 @@ rule train_classifier:
         slicedDNAdereplicated=rules.dereplicated_sliced_data.output.slicedDNAdereplicated,
         dereplicatedTaxaSliced=rules.dereplicated_sliced_data.output.dereplicatedTaxaSliced
     output:
-        "databases/classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"
+        DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax-dereplicated-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"
     log:
         "logs/SILVA_classification_db_prep_qc_SILVA_seqs_train_sliced_classifier.log"
     priority: 43
@@ -118,19 +118,19 @@ rule train_classifier:
 
 rule clean_pr2_fasta_extract_headers:
     input:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"
     output:
-        clean=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.fasta"),
-        headers="databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.txt"
+        clean=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.fasta"),
+        headers=DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.txt"
     priority: 50
     script:
         "../scripts/tax-classifier-construction/PR2/script_to_reformat_PR.sh"
 
 rule import_pr2_fasta:
     input:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.fasta"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.fasta"
     output:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.qza")
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.qza")
     priority: 49
     conda:
         config["qiime2version"]
@@ -139,9 +139,9 @@ rule import_pr2_fasta:
 
 rule import_pr2_taxonomy:
     input:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.txt"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.txt"
     output:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.qza")
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.qza")
     priority: 49
     conda:
         config["qiime2version"]
@@ -150,9 +150,9 @@ rule import_pr2_taxonomy:
 
 rule cull_pr2_seqs:
     input:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.qza"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.qza"
     output:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.qza")
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.qza")
     priority: 48
     conda:
         config["qiime2version"]
@@ -161,11 +161,11 @@ rule cull_pr2_seqs:
 
 rule derep_seqs_taxonomy:
     input:
-        culled="databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.qza",
-        taxonomy="databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.qza"
+        culled=DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.qza",
+        taxonomy=DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.qza"
     output:
-        derepseqs=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep.qza"),
-        dereptaxa=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep.qza")
+        derepseqs=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep.qza"),
+        dereptaxa=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep.qza")
     priority: 47
     conda:
         config["qiime2version"]
@@ -174,12 +174,12 @@ rule derep_seqs_taxonomy:
 
 rule extract_primers_pr2:
     input:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep.qza"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep.qza"
     params:
         fwdPrimer=config["fwdPrimer"],
         revPrimer=config["revPrimer"]
     output:
-        slicedDNA=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza")
+        slicedDNA=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza")
     log:
         "logs/PR2_classification_db_prep_qc_PR2_seqs_extract_primers.log"
     priority: 45
@@ -191,10 +191,10 @@ rule extract_primers_pr2:
 rule dereplicate_extracted_pr2_reads:
     input:
         slicedDNA=rules.extract_primers_pr2.output.slicedDNA,
-        dereplicatedTaxa="databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep.qza"
+        dereplicatedTaxa=DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep.qza"
     output:
-        slicedDNAdereplicated=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_derep.qza"),
-        dereplicatedTaxaSliced=temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_derep.qza")
+        slicedDNAdereplicated=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_derep.qza"),
+        dereplicatedTaxaSliced=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.derep_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_derep.qza")
     log:
         "logs/PR2_classification_db_prep_qc_PR2_seqs_dereplicate_sliced_data.log"
     priority: 44
@@ -208,7 +208,7 @@ rule train_classifier_pr2:
         slicedDNAdereplicated=rules.dereplicate_extracted_pr2_reads.output.slicedDNAdereplicated,
         dereplicatedTaxaSliced=rules.dereplicate_extracted_pr2_reads.output.dereplicatedTaxaSliced   
     output:
-        "databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza"
     log:
         "logs/PR2_classification_db_prep_qc_PR2_seqs_train_sliced_classifier.log"
     priority: 43

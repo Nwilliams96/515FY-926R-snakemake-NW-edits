@@ -3,15 +3,14 @@ import os
 import pandas as pd
 from snakemake.utils import validate
 
-# Resolve optional workflow branches and database locations once so every rule
-# uses the same paths. Database-building rules always write to the repository's
-# local databases/ directory; prebuilt databases may live anywhere.
+# Resolve optional workflow branches and the shared database location once so
+# every rule uses the same paths. Database files always live outside the
+# run-specific repository clone.
 USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
 
-DATABASE_DIR = os.path.normpath(
-    config["database_dir"] if USE_PREEXISTING_DATABASES else "databases"
-)
+DATABASE_DIR = os.path.normpath(config["database_dir"])
+DATABASE_PREFIX = DATABASE_DIR + os.sep
 BBSPLIT_DB_DIR = os.path.join(
     DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db"
 )

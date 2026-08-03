@@ -6,12 +6,16 @@ workflow loads `config/config.yml` and expects `config/samples.tsv` and
 
 ## Database setup
 
+Set `database_dir` to a shared location outside the run-specific repository
+clone, such as `../eASV-databases`. This path is used whether the workflow is
+building the databases or reusing an existing installation.
+
 Set `use_preexisting_databases: false` to let the workflow download and train
-its databases under the repository-local `databases/` directory.
+the databases in that shared directory. Once setup finishes, later project
+clones can point to the same directory and set the option to `true`.
 
 Set `use_preexisting_databases: true` to skip all database download and
-training rules. In that mode, `database_dir` must point to a database root with
-this structure:
+training rules. The shared database root must have this structure:
 
 ```text
 database_dir/

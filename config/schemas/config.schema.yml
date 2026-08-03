@@ -61,6 +61,7 @@ required:
   - samplesheet
   - studyName
   - use_preexisting_databases
+  - database_dir
   - rawdatadir
   - R1file_ending
   - R2file_ending
@@ -71,12 +72,6 @@ required:
   - qiime2version
   - SILVAversion
 allOf:
-  - if:
-      properties:
-        use_preexisting_databases:
-          const: true
-    then:
-      required: [database_dir]
   - if:
       properties:
         use_internal_standards:

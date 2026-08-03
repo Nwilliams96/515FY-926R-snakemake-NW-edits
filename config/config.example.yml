@@ -1,9 +1,10 @@
 samplesheet: "config/samples.tsv"
 studyName: "example-study"
 
-# Set to true to skip database download/training and use database_dir.
+# Set to true to skip database download/training and reuse database_dir.
 use_preexisting_databases: false
-database_dir: "databases"
+# Keep databases outside this run-specific repository clone so other runs can reuse them.
+database_dir: "../eASV-databases"
 
 rawdatadir: "/path/to/demultiplexed-fastq-files/"
 R1file_ending: ".R1.fastq.gz"

@@ -4,7 +4,7 @@
 
 rule download_prok_db:
     output:
-        temp("databases/bbsplit-db/SILVA_132_PROK.cdhit95pc.fasta"),
+        temp(DATABASE_PREFIX + "bbsplit-db/SILVA_132_PROK.cdhit95pc.fasta"),
     log:
         "logs/aria2_bbsplit_prok_db_download.log",
     params:
@@ -20,7 +20,7 @@ rule download_prok_db:
 
 rule download_euk_db:
     output:
-        temp("databases/bbsplit-db/SILVA_132_and_PR2_EUK.cdhit95pc.fasta"),
+        temp(DATABASE_PREFIX + "bbsplit-db/SILVA_132_and_PR2_EUK.cdhit95pc.fasta"),
     log:
         "logs/aria2_bbsplit_euk_db_download.log",
     params:
@@ -36,7 +36,7 @@ rule download_euk_db:
 
 rule download_pr2:
     output:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz")
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz")
     log:
         "logs/download_pr2.log"
     params:
@@ -53,9 +53,9 @@ rule download_pr2:
 
 rule unzip_pr2:
     input:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz"),
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz"),
     output:
-        temp("databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"),
+        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"),
     log:
         "logs/gunzip/extract_pr2.log",
     threads: 1
