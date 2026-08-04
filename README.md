@@ -19,6 +19,10 @@ Run this workflow with `--use-conda`. On the first run, Snakemake downloads and
 creates the rule-specific QIIME 2, R, BLAST, BBMap, and utility environments.
 Subsequent runs reuse them.
 
+The cloned repository intentionally does not include a `config/` folder. Create
+and download the study-specific setup package from the pipeline tutorial, then
+place its contents in the repository before running Snakemake.
+
 Instructions for Nathan:
 
 1. Install the requirements above, using the full Snakemake package rather than `snakemake-minimal`.

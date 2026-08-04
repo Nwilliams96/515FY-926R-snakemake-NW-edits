@@ -123,5 +123,5 @@ def get_final_output():
     return final_output
 
 # validate sample sheet and config file
-validate(samples, schema="../../config/schemas/samples.schema.yml")
-validate(config, schema="../../config/schemas/config.schema.yml")
+validate(samples, schema="../../schemas/samples.schema.yml")
+validate(config, schema="../../schemas/config.schema.yml")
