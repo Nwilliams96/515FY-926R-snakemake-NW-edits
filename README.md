@@ -21,7 +21,7 @@ Subsequent runs reuse them.
 
 The cloned repository intentionally does not include a `config/` folder. Create
 and download the study-specific setup package from the pipeline tutorial, then
-place its contents in the repository before running Snakemake.
+place its complete `config/` folder in the repository before running Snakemake.
 
 Instructions for Nathan:
 
