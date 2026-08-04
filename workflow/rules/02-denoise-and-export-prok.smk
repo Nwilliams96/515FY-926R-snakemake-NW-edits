@@ -49,7 +49,7 @@ rule denoise_prok_dada2:
 
 rule export_DADA2_results:
     input:
-        directory("results/02-proks/03-DADA2d/")
+        "results/02-proks/03-DADA2d/"
     params:
         studyName=config["studyName"]
     output:
