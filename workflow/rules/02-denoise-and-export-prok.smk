@@ -49,7 +49,7 @@ rule denoise_prok_dada2:
 
 rule export_DADA2_results:
     input:
-        directory("results/02-proks/03-DADA2d/")
+        "results/02-proks/03-DADA2d/"
     params:
         studyName=config["studyName"]
     output:
@@ -65,9 +65,8 @@ rule export_DADA2_results:
 
 rule classify_ASVs:
     input:
-        "results/02-proks/03-DADA2d/representative_sequences.qza"
-    params:
-        classDB=rules.train_classifier.output,
+        sequences="results/02-proks/03-DADA2d/representative_sequences.qza",
+        classDB=SILVA_CLASSIFIER,
     output:
         directory("results/02-proks/05-classified/"),
         classified="results/02-proks/05-classified/" + config["studyName"] + "_SILVA.classified.qza"
@@ -124,7 +123,7 @@ rule splitchloroplasts:
 
 rule reclassify_chloro_split_tables:
     input:
-        PR2classifier="databases/classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + "_dereplicated_final_classifier_USE_ME.qza",
+        PR2classifier=PR2_CLASSIFIER,
         proktable=rules.denoise_prok_dada2.output.proktable,
         proktax=rules.classify_ASVs.output.classified,
         includechloroseqs=rules.splitchloroplasts.output.includechloroseqs

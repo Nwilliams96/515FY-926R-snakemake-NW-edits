@@ -1,10 +1,24 @@
-if config["use_internal_standards"]:
+if USE_INTERNAL_STANDARDS:
 
-    rule prepare_16S_BLASTdb:
+    rule prepare_internal_standard_fastas:
         input:
+            "config/internal_stds.tsv"
+        output:
             intstd1="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta",
             intstd2="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".fasta",
             intstd3="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".fasta"
+        params:
+            intstd1name=config["intstds"]["intstd1"],
+            intstd2name=config["intstds"]["intstd2"],
+            intstd3name=config["intstds"]["intstd3"]
+        script:
+            "../scripts/prepare_internal_standard_fastas.py"
+
+    rule prepare_16S_BLASTdb:
+        input:
+            intstd1=rules.prepare_internal_standard_fastas.output.intstd1,
+            intstd2=rules.prepare_internal_standard_fastas.output.intstd2,
+            intstd3=rules.prepare_internal_standard_fastas.output.intstd3
         output:
             intstd1="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta.nhr",
             intstd2="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".fasta.nhr",
@@ -55,7 +69,9 @@ if config["use_internal_standards"]:
             isd_1_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_1_isd_3_mean_recovery_ratio.tsv",
             isd_2_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_2_isd_3_mean_recovery_ratio.tsv",
             recovery_plot="results/06-figures/" + config["studyName"] + ".recovery_ratios.pdf",
-            domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf"
+            domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf",
+            recovery_plot_png="results/06-figures/" + config["studyName"] + ".recovery_ratios.png",
+            domain_plot_png="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.png"
         conda:
             "../envs/r-tidyverse-2.0.0.yml"
         log:

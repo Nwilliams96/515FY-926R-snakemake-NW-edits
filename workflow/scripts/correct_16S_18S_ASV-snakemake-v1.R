@@ -42,6 +42,19 @@ read_summary <- readr::read_tsv(readsum_files, show_col_types = FALSE) %>% as.da
 # Import bioanalyzer
 bioanalyzer_results <- readr::read_tsv(bioanalyzer_path, show_col_types = FALSE) %>% as.data.table()
 
+required_bioanalyzer_columns <- c("sample_type", "amount_pM")
+missing_bioanalyzer_columns <- setdiff(required_bioanalyzer_columns, names(bioanalyzer_results))
+if (length(missing_bioanalyzer_columns) > 0) {
+  stop(
+    "config/bioanalyzer.tsv is missing required column(s): ",
+    paste(missing_bioanalyzer_columns, collapse = ", "),
+    ". Expected columns: sample_type and amount_pM."
+  )
+}
+
+bioanalyzer_results[, sample_type := toupper(trimws(as.character(sample_type)))]
+bioanalyzer_results[, amount_pM := as.numeric(amount_pM)]
+
 # Import Stats
 statistics_18S <- purrr::map_dfr(stats18s_files, ~ readr::read_delim(.x, delim = "\t", show_col_types = FALSE)) %>% slice(-1)
 statistics_16S <- purrr::map_dfr(stats16s_files, ~ readr::read_delim(.x, delim = "\t", show_col_types = FALSE)) %>% slice(-1)
@@ -59,8 +72,21 @@ PROK_frac <- PROK_reads / (PROK_reads + EUK_reads)
 EUK_frac <- EUK_reads / (PROK_reads + EUK_reads)
 
 #Turn concentrations into objects
-Concentration_16S <- bioanalyzer_results[Molecule == 16, `Amount (pM)`]
-Concentration_18S <- bioanalyzer_results[Molecule == 18, `Amount (pM)`]
+Concentration_16S <- bioanalyzer_results[sample_type == "16S", amount_pM]
+Concentration_18S <- bioanalyzer_results[sample_type == "18S", amount_pM]
+
+if (
+  length(Concentration_16S) != 1 ||
+  length(Concentration_18S) != 1 ||
+  anyNA(c(Concentration_16S, Concentration_18S)) ||
+  any(c(Concentration_16S, Concentration_18S) < 0) ||
+  (Concentration_16S + Concentration_18S) <= 0
+) {
+  stop(
+    "config/bioanalyzer.tsv must contain exactly one 16S row and one 18S row, ",
+    "with non-negative numeric amount_pM values whose sum is greater than zero."
+  )
+}
 
 #Calculate 16S ratio
 bioanalyzer_frac_16S <- Concentration_16S / (Concentration_16S + Concentration_18S)
