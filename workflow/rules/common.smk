@@ -116,7 +116,6 @@ def get_final_output():
     final_output.append("results/02-euks/sample-metadata.tsv"),
     final_output.append("results/02-euks/12-SILVA-only-barplots/"),
     final_output.append("results/02-euks/14-subsetting/reclassified-PR2/fixed/taxonomy-without-spaces.qza"),
-    final_output.append("results/02-euks/14-subsetting/split-tables/include_Metazoa_PR2_filtered_table.qza"),
     final_output.append("results/02-euks/15-exports/" + config["studyName"] + ".include_Metazoa_PR2_filtered_table.with-tax.tsv"),
     final_output.append("results/" + config["studyName"] + ".eukfrac-per-sample.tsv"),
     final_output.append("results/" + config["studyName"] + ".eukfrac-all.tsv"),
