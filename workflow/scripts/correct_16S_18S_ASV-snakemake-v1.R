@@ -39,8 +39,16 @@ raw_18S <- purrr::map_dfr(raw18s_files, ~
 # Import read_summary
 read_summary <- readr::read_tsv(readsum_files, show_col_types = FALSE) %>% as.data.table()
 
-# Import bioanalyzer
-bioanalyzer_results <- readr::read_tsv(bioanalyzer_path, show_col_types = FALSE) %>% as.data.table()
+# Import bioanalyzer. Force sample_type to character because readr otherwise
+# parses values such as "16S" and "18S" as the numbers 16 and 18.
+bioanalyzer_results <- readr::read_tsv(
+  bioanalyzer_path,
+  col_types = readr::cols(
+    sample_type = readr::col_character(),
+    amount_pM = readr::col_double()
+  ),
+  show_col_types = FALSE
+) %>% as.data.table()
 
 required_bioanalyzer_columns <- c("sample_type", "amount_pM")
 missing_bioanalyzer_columns <- setdiff(required_bioanalyzer_columns, names(bioanalyzer_results))
