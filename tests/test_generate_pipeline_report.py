@@ -26,11 +26,17 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             stats = (
-                "sample-id\tinput\tfiltered\tnon-chimeric\n"
-                "S-1\t{input}\t{filtered}\t{final}\n"
+                "sample-id\tinput\tfiltered\tdenoised\tmerged\tnon-chimeric\n"
+                "S-1\t{input}\t{filtered}\t{denoised}\t{merged}\t{final}\n"
             )
-            (root / "16.tsv").write_text(stats.format(input=700, filtered=650, final=600), encoding="utf-8")
-            (root / "18.tsv").write_text(stats.format(input=300, filtered=250, final=200), encoding="utf-8")
+            (root / "16.tsv").write_text(
+                stats.format(input=700, filtered=650, denoised=640, merged=610, final=600),
+                encoding="utf-8",
+            )
+            (root / "18.tsv").write_text(
+                stats.format(input=300, filtered=250, denoised=220, merged="", final=200),
+                encoding="utf-8",
+            )
             (root / "long.tsv").write_text(
                 "SampleID\tDomain\tPhylum\tDivision\tASV_hash\tCorrected_Sequence_Counts\n"
                 "S-1\tBacteria\tProteobacteria\t\tA1\t600\n"
@@ -74,9 +80,23 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Raw paired reads", rendered)
             self.assertIn("S-1", rendered)
             self.assertIn("Median Phred score", rendered)
+            self.assertIn("Filtering loss", rendered)
+            self.assertIn("Denoising loss", rendered)
+            self.assertIn("Pair-merging loss", rendered)
+            self.assertIn("Chimera-removal loss", rendered)
+            self.assertIn("Not applicable", rendered)
             self.assertIn("Proteobacteria", rendered)
             self.assertIn("data:image/png;base64,", rendered)
             self.assertIn("trunclens.truncR1", rendered)
+
+            domain_chart = REPORT.svg_composition(
+                {"S-1": {"Bacteria": 60, "Eukaryota": 40}},
+                "Domain composition by sample",
+            )
+            self.assertGreater(
+                domain_chart.index('class="chart-legend"'),
+                domain_chart.index("</svg>"),
+            )
 
 
 if __name__ == "__main__":

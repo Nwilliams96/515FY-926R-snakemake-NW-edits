@@ -39,6 +39,14 @@ def fmt_percent(value):
     return "—" if value is None else f"{100 * value:.1f}%"
 
 
+def fmt_loss(before, after):
+    if before is None or after is None:
+        return "—"
+    lost = max(0, before - after)
+    fraction = lost / before if before else None
+    return f"{fmt_count(lost)} ({fmt_percent(fraction)})"
+
+
 def normalize_sample_id(value):
     return str(value).strip().replace("_", "-") if value is not None else ""
 
@@ -62,13 +70,34 @@ def parse_dada2_stats(path):
     for row in read_tsv(path):
         sample = first_value(row, ["sample-id", "sampleid", "sample"])
         input_reads = number(first_value(row, ["input", "input reads"]))
-        final_reads = number(first_value(row, ["non-chimeric", "non_chimeric", "nonchimeric"]))
+        filtered_reads = number(first_value(row, ["filtered", "filtered reads"]))
+        denoised_reads = number(first_value(row, ["denoised", "denoised reads"]))
+        merged_reads = number(first_value(row, ["merged", "merged reads"]))
+        final_reads = number(
+            first_value(row, ["non-chimeric", "non_chimeric", "nonchimeric"])
+        )
         if sample and input_reads is not None and final_reads is not None:
             result[normalize_sample_id(sample)] = {
                 "input": input_reads,
+                "filtered": filtered_reads,
+                "denoised": denoised_reads,
+                "merged": merged_reads,
                 "final": final_reads,
                 "retention": final_reads / input_reads if input_reads else None,
             }
+    return result
+
+
+def aggregate_dada2_stats(stats):
+    result = {}
+    for stage in ("input", "filtered", "denoised", "merged", "final"):
+        values = [row.get(stage) for row in stats.values() if row.get(stage) is not None]
+        result[stage] = sum(values) if values else None
+    result["retention"] = (
+        result["final"] / result["input"]
+        if result["input"] and result["final"] is not None
+        else None
+    )
     return result
 
 
@@ -215,7 +244,9 @@ def svg_composition(sample_totals, title):
     if len(category_totals) > len(categories):
         categories.append("Other")
     width = max(760, 80 + 42 * len(samples))
-    height = 430
+    longest_label = max((len(str(sample)) for sample in samples), default=0)
+    label_space = min(145, max(80, longest_label * 6))
+    height = 340 + label_space
     plot_x, plot_y, plot_w, plot_h = 65, 30, width - 100, 300
     bar_w = min(30, plot_w / max(1, len(samples)) * 0.72)
     step = plot_w / max(1, len(samples))
@@ -240,14 +271,13 @@ def svg_composition(sample_totals, title):
                 f'fill="{PALETTE[cat_index % len(PALETTE)]}"><title>{esc(sample)} — {esc(category)}: {100 * value / total:.1f}%</title></rect>'
             )
         pieces.append(f'<text transform="translate({x + bar_w / 2:.1f},{plot_y + plot_h + 10}) rotate(55)" class="svg-label">{esc(sample)}</text>')
-    legend_y = 390
-    legend_x = 65
+    pieces.append('</svg><div class="chart-legend" aria-label="Domain legend">')
     for index, category in enumerate(categories):
-        x = legend_x + (index % 5) * 145
-        y = legend_y + (index // 5) * 24
-        pieces.append(f'<rect x="{x}" y="{y - 11}" width="12" height="12" fill="{PALETTE[index % len(PALETTE)]}"/>')
-        pieces.append(f'<text x="{x + 18}" y="{y}" class="svg-label">{esc(category)}</text>')
-    pieces.append('</svg></div>')
+        pieces.append(
+            f'<span class="legend-item"><span class="legend-swatch" '
+            f'style="background:{PALETTE[index % len(PALETTE)]}"></span>{esc(category)}</span>'
+        )
+    pieces.append('</div></div>')
     return "".join(pieces)
 
 
@@ -292,6 +322,25 @@ def quality_status(retention):
     return "low", "bad"
 
 
+def dada2_loss_cells(stats, paired):
+    merge_loss = (
+        fmt_loss(stats.get("denoised"), stats.get("merged"))
+        if paired
+        else '<span class="pill neutral">Not applicable</span>'
+    )
+    pre_chimera = stats.get("merged") if paired else stats.get("denoised")
+    status, status_class = quality_status(stats.get("retention"))
+    return (
+        f"<td>{fmt_count(stats.get('input'))}</td>"
+        f"<td>{fmt_loss(stats.get('input'), stats.get('filtered'))}</td>"
+        f"<td>{fmt_loss(stats.get('filtered'), stats.get('denoised'))}</td>"
+        f"<td>{merge_loss}</td>"
+        f"<td>{fmt_loss(pre_chimera, stats.get('final'))}</td>"
+        f"<td>{fmt_count(stats.get('final'))}</td>"
+        f"<td><span class='pill {status_class}'>{fmt_percent(stats.get('retention'))} · {status}</span></td>"
+    )
+
+
 def render_report(config, paths, output_path):
     sample_rows = read_tsv(paths["samples"])
     sample_names = [first_value(row, ["sample", "sample-id", "sampleid"]) for row in sample_rows]
@@ -308,6 +357,8 @@ def render_report(config, paths, output_path):
 
     stats16 = parse_dada2_stats(paths["stats16s"])
     stats18 = parse_dada2_stats(paths["stats18s"])
+    aggregate16 = aggregate_dada2_stats(stats16)
+    aggregate18 = aggregate_dada2_stats(stats18)
     raw_pairs, primer_retained = parse_cutadapt_logs(paths.get("trimming_logs", []))
     quality_profiles = parse_quality_profiles(paths.get("quality_directories", []))
 
@@ -355,25 +406,28 @@ def render_report(config, paths, output_path):
         stages.append(("Primer-matched reads", {"Reads": primer_retained}))
     stages.extend([
         ("16S / 18S split", {"16S": prok_split, "18S": euk_split}),
-        ("After DADA2", {"16S": final16, "18S": final18}),
+        ("After chimera removal", {"16S": final16, "18S": final18}),
     ])
 
-    quality_rows = []
+    dada2_sample_rows = []
     for sample in ordered_samples:
-        split_row = split.get(sample, {})
         s16 = stats16.get(sample, {})
         s18 = stats18.get(sample, {})
-        status16, class16 = quality_status(s16.get("retention"))
-        status18, class18 = quality_status(s18.get("retention"))
-        total = split_row.get("total")
-        euk_fraction = split_row.get("euk", 0) / total if total else None
-        quality_rows.append(
-            f"<tr><td>{esc(sample)}</td><td>{fmt_count(total)}</td><td>{fmt_percent(euk_fraction)}</td>"
-            f"<td>{fmt_count(s16.get('input'))}</td><td>{fmt_count(s16.get('final'))}</td>"
-            f"<td><span class='pill {class16}'>{fmt_percent(s16.get('retention'))} · {status16}</span></td>"
-            f"<td>{fmt_count(s18.get('input'))}</td><td>{fmt_count(s18.get('final'))}</td>"
-            f"<td><span class='pill {class18}'>{fmt_percent(s18.get('retention'))} · {status18}</span></td></tr>"
-        )
+        if s16:
+            dada2_sample_rows.append(
+                f"<tr><td>{esc(sample)}</td><td>16S paired</td>"
+                f"{dada2_loss_cells(s16, paired=True)}</tr>"
+            )
+        if s18:
+            dada2_sample_rows.append(
+                f"<tr><td>{esc(sample)}</td><td>18S concatenated</td>"
+                f"{dada2_loss_cells(s18, paired=False)}</tr>"
+            )
+
+    dada2_summary_rows = (
+        f"<tr><td>16S paired</td>{dada2_loss_cells(aggregate16, paired=True)}</tr>"
+        f"<tr><td>18S concatenated</td>{dada2_loss_cells(aggregate18, paired=False)}</tr>"
+    )
 
     parameter_rows = "".join(
         f"<tr><th>{esc(key)}</th><td><code>{esc(value)}</code></td></tr>"
@@ -419,6 +473,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{width:100%;border-collapse:collapse;white-space:nowrap}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}} thead th{{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.04em}} tbody tr:last-child td,tbody tr:last-child th{{border-bottom:0}}
 .pill{{display:inline-block;padding:3px 8px;border-radius:99px;font-size:12px;font-weight:750}} .pill.good{{background:#dcfce7;color:#166534}} .pill.warn{{background:#fef3c7;color:#92400e}} .pill.bad{{background:#fee2e2;color:#991b1b}} .pill.neutral{{background:#e2e8f0;color:#475569}}
 .svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .svg-inside{{fill:white;font-size:11px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
+.chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
 .trunc-line{{stroke:#b42318;stroke-width:1.5;stroke-dasharray:5 4}} .trunc-label{{fill:#b42318;font-size:10px;font-weight:700}}
 .report-figure{{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin:18px auto}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
 @media print{{nav{{display:none}}body{{background:white}}section{{box-shadow:none;break-inside:avoid}}}}
@@ -431,7 +486,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="read-fate"><div class="eyebrow">Processing losses</div><h2>Where reads were retained or lost</h2><p>Counts are aggregated across samples. The 16S and 18S paths branch after database-based read splitting.</p>{svg_read_fate(stages)}</section>
-<section id="quality"><div class="eyebrow">Per-base and per-sample QC</div><h2>Read quality and DADA2 retention</h2><h3>Median base-quality profiles</h3><p>Profiles are extracted from the QIIME 2 demultiplexing visualizations. Dashed lines show the configured DADA2 truncation positions.</p>{quality_chart}<h3>DADA2 retention by sample</h3><p>Retention is the non-chimeric read count divided by the DADA2 input count. Values below 40% are highlighted for review; thresholds are guides rather than pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Split reads</th><th>18S fraction</th><th>16S input</th><th>16S final</th><th>16S retention</th><th>18S input</th><th>18S final</th><th>18S retention</th></tr></thead><tbody>{''.join(quality_rows)}</tbody></table></div></section>
+<section id="quality"><div class="eyebrow">Per-base and per-sample QC</div><h2>Read quality and DADA2 losses</h2><h3>Median base-quality profiles</h3><p>Profiles are extracted from the QIIME 2 demultiplexing visualizations. Dashed lines show the configured DADA2 truncation positions.</p>{quality_chart}<h3>Where reads were lost in DADA2</h3><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
 <section id="composition"><div class="eyebrow">Basic bar plot</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}</section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Most abundant taxa</h2><p>For SILVA assignments this uses phylum where available; for PR2 it uses division or supergroup.</p>{taxa_chart}<h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></section>
 {internal_section}
