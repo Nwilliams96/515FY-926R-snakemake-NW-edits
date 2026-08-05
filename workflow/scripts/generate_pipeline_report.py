@@ -1,7 +1,5 @@
 """Generate a self-contained HTML summary for a completed amplicon run."""
 
-from __future__ import annotations
-
 import base64
 import csv
 import html

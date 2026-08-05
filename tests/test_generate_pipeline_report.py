@@ -12,6 +12,10 @@ SPEC.loader.exec_module(REPORT)
 
 
 class GeneratePipelineReportTests(unittest.TestCase):
+    def test_compiles_after_snakemake_generated_preamble(self):
+        source = "snakemake = None\n" + SCRIPT.read_text(encoding="utf-8")
+        compile(source, str(SCRIPT), "exec")
+
     def test_renders_summary_and_optional_figure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
