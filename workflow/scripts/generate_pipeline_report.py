@@ -3,9 +3,7 @@
 import base64
 import csv
 import html
-import math
 import re
-import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -101,59 +99,6 @@ def aggregate_dada2_stats(stats):
     return result
 
 
-def parse_cutadapt_logs(paths):
-    total = 0
-    retained = 0
-    found_total = False
-    found_retained = False
-    for path in paths:
-        try:
-            text = Path(path).read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        total_match = re.search(r"Total read pairs processed:\s*([\d,]+)", text, re.I)
-        retained_match = re.search(r"Pairs written \(passing filters\):\s*([\d,]+)", text, re.I)
-        if total_match:
-            total += int(total_match.group(1).replace(",", ""))
-            found_total = True
-        if retained_match:
-            retained += int(retained_match.group(1).replace(",", ""))
-            found_retained = True
-    return total if found_total else None, retained if found_retained else None
-
-
-def parse_quality_profiles(directories):
-    """Extract median per-base Phred profiles from QIIME 2 demux QZVs."""
-    profiles = []
-    directory_labels = ["16S paired", "18S paired", "18S concatenated"]
-    for directory_index, directory in enumerate(directories):
-        label_prefix = directory_labels[directory_index] if directory_index < len(directory_labels) else Path(directory).name
-        for qzv_path in sorted(Path(directory).glob("*.qzv")):
-            try:
-                archive = zipfile.ZipFile(qzv_path)
-            except (OSError, zipfile.BadZipFile):
-                continue
-            with archive:
-                summary_names = [
-                    name for name in archive.namelist()
-                    if name.lower().endswith("seven-number-summaries.tsv")
-                ]
-                for summary_name in summary_names:
-                    direction_name = Path(summary_name).name.split("-seven-number", 1)[0]
-                    direction = direction_name.replace("_", " ").replace("-", " ").strip().title()
-                    text = archive.read(summary_name).decode("utf-8-sig", errors="replace")
-                    rows = list(csv.DictReader(text.splitlines(), delimiter="\t"))
-                    points = []
-                    for row in rows:
-                        position = number(first_value(row, ["position", "pos", "base position"]))
-                        median = number(first_value(row, ["50%", "median", "50th percentile"]))
-                        if position is not None and median is not None:
-                            points.append((position, median))
-                    if points:
-                        profiles.append((f"{label_prefix} {direction}".strip(), points))
-    return profiles
-
-
 def flatten_config(config, prefix=""):
     rows = []
     for key in sorted(config):
@@ -166,72 +111,6 @@ def flatten_config(config, prefix=""):
         else:
             rows.append((label, value))
     return rows
-
-
-def svg_read_fate(stages):
-    width = 940
-    height = 280
-    left = 185
-    plot_width = 700
-    bar_height = 38
-    gap = 18
-    max_value = max((sum(parts.values()) for _, parts in stages), default=1) or 1
-    colors = {"16S": "#2563eb", "18S": "#0d9488", "Reads": "#64748b"}
-    pieces = [f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Read retention through the pipeline">']
-    for index, (label, parts) in enumerate(stages):
-        y = 24 + index * (bar_height + gap)
-        total = sum(parts.values())
-        pieces.append(f'<text x="{left - 12}" y="{y + 24}" text-anchor="end" class="svg-label">{esc(label)}</text>')
-        x = left
-        for category, value in parts.items():
-            segment = plot_width * value / max_value
-            pieces.append(
-                f'<rect x="{x:.1f}" y="{y}" width="{segment:.1f}" height="{bar_height}" '
-                f'rx="5" fill="{colors.get(category, "#64748b")}"><title>{esc(category)}: {fmt_count(value)}</title></rect>'
-            )
-            if segment > 74:
-                pieces.append(
-                    f'<text x="{x + segment / 2:.1f}" y="{y + 24}" text-anchor="middle" class="svg-inside">'
-                    f'{esc(category)} {fmt_count(value)}</text>'
-                )
-            x += segment
-        pieces.append(f'<text x="{left + plot_width + 12}" y="{y + 24}" class="svg-total">{fmt_count(total)}</text>')
-    pieces.append('</svg>')
-    return "".join(pieces)
-
-
-def svg_quality_profiles(profiles, trunc_r1=None, trunc_r2=None):
-    if not profiles:
-        return '<p class="note">Median base-quality profiles were not found in the QIIME 2 visualization archives.</p>'
-    width, height = 940, 390
-    left, top, plot_w, plot_h = 65, 28, 830, 285
-    max_x = max(point[0] for _, points in profiles for point in points) or 1
-    max_y = max(45, math.ceil(max(point[1] for _, points in profiles for point in points) / 5) * 5)
-    pieces = [f'<svg viewBox="0 0 {width} {height}" role="img" aria-label="Median per-base Phred quality">']
-    for tick in range(0, int(max_y) + 1, 5):
-        y = top + plot_h * (1 - tick / max_y)
-        pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left + plot_w}" y2="{y:.1f}" class="grid"/>')
-        pieces.append(f'<text x="{left - 9}" y="{y + 4:.1f}" text-anchor="end" class="svg-label">{tick}</text>')
-    for truncation, label in ((number(trunc_r1), "R1 truncation"), (number(trunc_r2), "R2 truncation")):
-        if truncation is not None and truncation <= max_x:
-            x = left + plot_w * truncation / max_x
-            pieces.append(f'<line x1="{x:.1f}" y1="{top}" x2="{x:.1f}" y2="{top + plot_h}" class="trunc-line"/>')
-            pieces.append(f'<text x="{x + 4:.1f}" y="{top + 13}" class="trunc-label">{esc(label)}</text>')
-    for index, (label, points) in enumerate(profiles):
-        color = PALETTE[index % len(PALETTE)]
-        coordinates = " ".join(
-            f"{left + plot_w * x / max_x:.1f},{top + plot_h * (1 - y / max_y):.1f}"
-            for x, y in points
-        )
-        pieces.append(f'<polyline points="{coordinates}" fill="none" stroke="{color}" stroke-width="2.2"><title>{esc(label)}</title></polyline>')
-        legend_x = left + (index % 3) * 270
-        legend_y = 345 + (index // 3) * 22
-        pieces.append(f'<line x1="{legend_x}" y1="{legend_y - 4}" x2="{legend_x + 24}" y2="{legend_y - 4}" stroke="{color}" stroke-width="3"/>')
-        pieces.append(f'<text x="{legend_x + 31}" y="{legend_y}" class="svg-label">{esc(label)}</text>')
-    pieces.append(f'<text x="{left + plot_w / 2}" y="{top + plot_h + 31}" text-anchor="middle" class="svg-label">Base position</text>')
-    pieces.append(f'<text transform="translate(17,{top + plot_h / 2}) rotate(-90)" text-anchor="middle" class="svg-label">Median Phred score</text>')
-    pieces.append('</svg>')
-    return "".join(pieces)
 
 
 def svg_composition(sample_totals, title):
@@ -359,8 +238,6 @@ def render_report(config, paths, output_path):
     stats18 = parse_dada2_stats(paths["stats18s"])
     aggregate16 = aggregate_dada2_stats(stats16)
     aggregate18 = aggregate_dada2_stats(stats18)
-    raw_pairs, primer_retained = parse_cutadapt_logs(paths.get("trimming_logs", []))
-    quality_profiles = parse_quality_profiles(paths.get("quality_directories", []))
 
     long_rows = read_tsv(paths["long_data"])
     abundance_column = "Corrected_Sequence_Counts"
@@ -388,8 +265,6 @@ def render_report(config, paths, output_path):
         ordered_samples.append(sample)
 
     split_total = sum(item["total"] for item in split.values())
-    prok_split = sum(item["prok"] for item in split.values())
-    euk_split = sum(item["euk"] for item in split.values())
     final16 = sum(item["final"] for item in stats16.values())
     final18 = sum(item["final"] for item in stats18.values())
     all_retentions = [item["retention"] for item in list(stats16.values()) + list(stats18.values()) if item["retention"] is not None]
@@ -398,16 +273,6 @@ def render_report(config, paths, output_path):
         ordered = sorted(all_retentions)
         middle = len(ordered) // 2
         median_retention = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
-
-    stages = []
-    if raw_pairs is not None:
-        stages.append(("Raw paired reads", {"Reads": raw_pairs}))
-    if primer_retained is not None:
-        stages.append(("Primer-matched reads", {"Reads": primer_retained}))
-    stages.extend([
-        ("16S / 18S split", {"16S": prok_split, "18S": euk_split}),
-        ("After chimera removal", {"16S": final16, "18S": final18}),
-    ])
 
     dada2_sample_rows = []
     for sample in ordered_samples:
@@ -449,12 +314,6 @@ def render_report(config, paths, output_path):
 
     domain_chart = svg_composition({sample: domains_by_sample[sample] for sample in ordered_samples if domains_by_sample[sample]}, "Domain composition by sample")
     taxa_chart = svg_top_taxa(taxa_totals)
-    truncation_config = config.get("trunclens", {})
-    quality_chart = svg_quality_profiles(
-        quality_profiles,
-        truncation_config.get("truncR1"),
-        truncation_config.get("truncR2"),
-    )
     generated = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
     study = config.get("studyName", "Amplicon run")
     document = f"""<!doctype html>
@@ -472,21 +331,19 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:24px 0}} .card{{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fbfcfe}} .card strong{{display:block;font-size:28px;line-height:1.2}} .card span{{color:var(--muted);font-size:13px}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{width:100%;border-collapse:collapse;white-space:nowrap}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}} thead th{{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.04em}} tbody tr:last-child td,tbody tr:last-child th{{border-bottom:0}}
 .pill{{display:inline-block;padding:3px 8px;border-radius:99px;font-size:12px;font-weight:750}} .pill.good{{background:#dcfce7;color:#166534}} .pill.warn{{background:#fef3c7;color:#92400e}} .pill.bad{{background:#fee2e2;color:#991b1b}} .pill.neutral{{background:#e2e8f0;color:#475569}}
-.svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .svg-inside{{fill:white;font-size:11px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
+.svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
 .chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
-.trunc-line{{stroke:#b42318;stroke-width:1.5;stroke-dasharray:5 4}} .trunc-label{{fill:#b42318;font-size:10px;font-weight:700}}
 .report-figure{{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin:18px auto}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
 @media print{{nav{{display:none}}body{{background:white}}section{{box-shadow:none;break-inside:avoid}}}}
 </style></head><body>
 <header><div class="eyebrow" style="color:#bfdbfe">515Y/926R amplicon workflow</div><h1>{esc(study)}</h1><p>Pipeline summary generated {esc(generated)}</p></header>
-<nav><a href="#overview">Overview</a><a href="#parameters">Parameters</a><a href="#read-fate">Read fate</a><a href="#quality">Quality</a><a href="#composition">Composition</a><a href="#taxa">Taxa</a>{'<a href="#internal-standards">Internal standards</a>' if internal_paths else ''}</nav>
+<nav><a href="#overview">Overview</a><a href="#parameters">Parameters</a><a href="#quality">DADA2</a><a href="#composition">Composition</a><a href="#taxa">Taxa</a>{'<a href="#internal-standards">Internal standards</a>' if internal_paths else ''}</nav>
 <main>
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
-<section id="read-fate"><div class="eyebrow">Processing losses</div><h2>Where reads were retained or lost</h2><p>Counts are aggregated across samples. The 16S and 18S paths branch after database-based read splitting.</p>{svg_read_fate(stages)}</section>
-<section id="quality"><div class="eyebrow">Per-base and per-sample QC</div><h2>Read quality and DADA2 losses</h2><h3>Median base-quality profiles</h3><p>Profiles are extracted from the QIIME 2 demultiplexing visualizations. Dashed lines show the configured DADA2 truncation positions.</p>{quality_chart}<h3>Where reads were lost in DADA2</h3><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
+<section id="quality"><div class="eyebrow">DADA2 processing</div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
 <section id="composition"><div class="eyebrow">Basic bar plot</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}</section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Most abundant taxa</h2><p>For SILVA assignments this uses phylum where available; for PR2 it uses division or supergroup.</p>{taxa_chart}<h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></section>
 {internal_section}
@@ -503,10 +360,6 @@ def run_from_snakemake(snakemake_object):
         "stats16s": str(snakemake_object.input.stats16s),
         "stats18s": str(snakemake_object.input.stats18s),
         "long_data": str(snakemake_object.input.long_data),
-        "quality_directories": list(
-            getattr(snakemake_object.input, "quality_directories", []) or []
-        ),
-        "trimming_logs": list(getattr(snakemake_object.input, "trimming_logs", []) or []),
         "internal_standard_figures": list(
             getattr(snakemake_object.input, "internal_standard_figures", []) or []
         ),

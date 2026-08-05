@@ -1,7 +1,6 @@
 import importlib.util
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 
 
@@ -43,17 +42,6 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "S-1\tEukaryota\t\tDinoflagellata\tA2\t200\n",
                 encoding="utf-8",
             )
-            (root / "trim.log").write_text(
-                "Total read pairs processed: 1,200\nPairs written (passing filters): 1,000\n",
-                encoding="utf-8",
-            )
-            quality_dir = root / "quality"
-            quality_dir.mkdir()
-            with zipfile.ZipFile(quality_dir / "visualization.qzv", "w") as archive:
-                archive.writestr(
-                    "example/data/forward-seven-number-summaries.tsv",
-                    "position\t50%\n1\t35\n2\t34\n",
-                )
             # A tiny valid PNG is sufficient to verify base64 embedding.
             png = root / "figure.png"
             png.write_bytes(
@@ -69,17 +57,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "stats16s": root / "16.tsv",
                     "stats18s": root / "18.tsv",
                     "long_data": root / "long.tsv",
-                    "quality_directories": [quality_dir],
-                    "trimming_logs": [root / "trim.log"],
                     "internal_standard_figures": [png],
                 },
                 output,
             )
             rendered = output.read_text(encoding="utf-8")
             self.assertIn("test-run", rendered)
-            self.assertIn("Raw paired reads", rendered)
             self.assertIn("S-1", rendered)
-            self.assertIn("Median Phred score", rendered)
             self.assertIn("Filtering loss", rendered)
             self.assertIn("Denoising loss", rendered)
             self.assertIn("Pair-merging loss", rendered)
@@ -88,6 +72,8 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Proteobacteria", rendered)
             self.assertIn("data:image/png;base64,", rendered)
             self.assertIn("trunclens.truncR1", rendered)
+            self.assertNotIn("Median base-quality profiles", rendered)
+            self.assertNotIn("Where reads were retained or lost", rendered)
 
             domain_chart = REPORT.svg_composition(
                 {"S-1": {"Bacteria": 60, "Eukaryota": 40}},
