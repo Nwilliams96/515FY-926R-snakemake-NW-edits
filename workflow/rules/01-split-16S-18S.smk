@@ -21,15 +21,13 @@ rule deinterleave_split_reads_euk:
     output:
         out="results/01-split/{sample}.euk.R1.fastq.gz",
         out2="results/01-split/{sample}.euk.R2.fastq.gz"
-    params:
-        command="reformat.sh",
-        overwrite=True,  # recommended
-        pigz=True,
-    threads: 4 
+    conda:
+        "../envs/bbmap.yaml"
+    threads: 4
     resources:
-        mem_mb=4000,  # optional: bbmap normaly needs a lot of memory, e.g. 60GB
-    wrapper:
-        "v8.0.3/bio/bbtools"
+        mem_mb=4000,
+    shell:
+        "reformat.sh in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
 
 rule deinterleave_split_reads_prok:
     input:
@@ -37,15 +35,13 @@ rule deinterleave_split_reads_prok:
     output:
         out="results/01-split/{sample}.prok.R1.fastq.gz",
         out2="results/01-split/{sample}.prok.R2.fastq.gz"
-    params:
-        command="reformat.sh",
-        overwrite=True,  # recommended
-        pigz=True,
+    conda:
+        "../envs/bbmap.yaml"
     threads: 4
     resources:
-        mem_mb=4000,  # optional: bbmap normally needs a lot of memory, e.g. 60GB
-    wrapper:
-        "v8.0.3/bio/bbtools"
+        mem_mb=4000,
+    shell:
+        "reformat.sh in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
 
 rule count_seqs:
     input:
