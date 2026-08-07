@@ -50,7 +50,8 @@ results/07-report/<studyName>.pipeline-report.html
 ```
 
 The report summarizes the configuration, read retention, sample-level quality
-control, domain composition, abundant taxa, and—when enabled—the
+control, domain composition, 16S/18S/chloroplast/mitochondrial assignments,
+unassigned sequences, abundant taxa, and—when enabled—the
 internal-standard results and figures.
 
 For convenient downloading, the workflow also copies the report and formatted

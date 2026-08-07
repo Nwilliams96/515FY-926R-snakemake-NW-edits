@@ -37,9 +37,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "long.tsv").write_text(
-                "SampleID\tDomain\tPhylum\tDivision\tASV_hash\tCorrected_Sequence_Counts\n"
-                "S-1\tBacteria\tProteobacteria\t\tA1\t600\n"
-                "S-1\tEukaryota\t\tDinoflagellata\tA2\t200\n",
+                "SampleID\tDomain\tPhylum\tDivision\tClass\tSequence_Type\t"
+                "plastid_16S_rRNA\tASV_hash\tCorrected_Sequence_Counts\n"
+                "S-1\tBacteria\tProteobacteria\t\t\tProkaryotic_16S\tno\tA1\t600\n"
+                "S-1\tEukaryota\t\tDinoflagellata\t\tEukaryote_18S\tno\tA2\t200\n"
+                "S-1\tEukaryota\t\tChloroplastida\t\tChloroplast_16S\tyes\tA3\t100\n"
+                "S-1\tEukaryota\t\t\tMitochondria\tEukaryote_18S\tno\tA4\t50\n"
+                "S-1\tUnassigned\t\t\t\tUnassigned\tno\tA5\t25\n",
                 encoding="utf-8",
             )
             # A tiny valid PNG is sufficient to verify base64 embedding.
@@ -70,6 +74,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Chimera-removal loss", rendered)
             self.assertIn("Not applicable", rendered)
             self.assertIn("Proteobacteria", rendered)
+            self.assertIn("Sequence assignments", rendered)
+            self.assertIn("total 16S", rendered)
+            self.assertIn("750</strong><span>total 16S", rendered)
+            self.assertIn("100</strong><span>chloroplast 16S", rendered)
+            self.assertIn("50</strong><span>mitochondrial 16S", rendered)
+            self.assertIn("25</strong><span>unassigned", rendered)
+            self.assertIn("Sequence-assignment counts", rendered)
             self.assertIn("data:image/png;base64,", rendered)
             self.assertIn("trunclens.truncR1", rendered)
             self.assertNotIn("Median base-quality profiles", rendered)

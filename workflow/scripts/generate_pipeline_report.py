@@ -177,6 +177,46 @@ def svg_top_taxa(taxa_totals, limit=12):
     return "".join(pieces)
 
 
+def svg_assignment_counts(assignment_totals):
+    order = [
+        "Prokaryotic 16S",
+        "Eukaryotic 18S",
+        "Chloroplast 16S",
+        "Mitochondrial 16S",
+        "Unassigned",
+        "Other",
+    ]
+    data = [(category, assignment_totals.get(category, 0)) for category in order]
+    data = [(category, value) for category, value in data if value > 0]
+    width, height = 900, max(260, 52 * len(data) + 55)
+    left, right = 220, 110
+    plot_w = width - left - right
+    max_value = max((value for _, value in data), default=1) or 1
+    pieces = [
+        f'<svg viewBox="0 0 {width} {height}" role="img" '
+        'aria-label="Sequence assignment counts">'
+    ]
+    for index, (category, value) in enumerate(data):
+        y = 26 + index * 48
+        bar_w = plot_w * value / max_value
+        colour = PALETTE[index % len(PALETTE)]
+        pieces.append(
+            f'<text x="{left - 12}" y="{y + 23}" text-anchor="end" '
+            f'class="svg-label">{esc(category)}</text>'
+        )
+        pieces.append(
+            f'<rect x="{left}" y="{y}" width="{bar_w:.1f}" height="32" '
+            f'rx="4" fill="{colour}"><title>{esc(category)}: '
+            f'{fmt_count(value)}</title></rect>'
+        )
+        pieces.append(
+            f'<text x="{left + bar_w + 8:.1f}" y="{y + 22}" '
+            f'class="svg-total">{fmt_count(value)}</text>'
+        )
+    pieces.append("</svg>")
+    return "".join(pieces)
+
+
 def embedded_image(path):
     raw = Path(path).read_bytes()
     encoded = base64.b64encode(raw).decode("ascii")
@@ -189,6 +229,44 @@ def taxonomy_label(row):
         if value and value.lower() not in {"na", "nan", "unassigned"}:
             return value
     return "Unassigned"
+
+
+def sequence_assignment(row):
+    lineage = " ".join(
+        str(row.get(key) or "")
+        for key in (
+            "Domain", "Supergroup", "Division", "Subdivision", "Phylum",
+            "Class", "Order", "Family", "Genus", "Species",
+            "ProPortal_ASV_Ecotype",
+        )
+    ).lower()
+    if "mitochond" in lineage:
+        return "Mitochondrial 16S"
+
+    sequence_type = re.sub(
+        r"[^a-z0-9]", "", str(row.get("Sequence_Type") or "").lower()
+    )
+    mapping = {
+        "prokaryotic16s": "Prokaryotic 16S",
+        "chloroplast16s": "Chloroplast 16S",
+        "eukaryote18s": "Eukaryotic 18S",
+        "eukaryotic18s": "Eukaryotic 18S",
+        "unassigned": "Unassigned",
+    }
+    if sequence_type in mapping:
+        return mapping[sequence_type]
+
+    plastid = str(row.get("plastid_16S_rRNA") or "").strip().lower()
+    domain = str(row.get("Domain") or "").strip().lower()
+    if plastid == "yes":
+        return "Chloroplast 16S"
+    if domain in {"bacteria", "archaea"}:
+        return "Prokaryotic 16S"
+    if domain == "eukaryota":
+        return "Eukaryotic 18S"
+    if not domain or domain == "unassigned":
+        return "Unassigned"
+    return "Other"
 
 
 def quality_status(retention):
@@ -244,6 +322,7 @@ def render_report(config, paths, output_path):
     if long_rows and abundance_column not in long_rows[0]:
         abundance_column = "Raw_Sequence_Counts"
     domains_by_sample = defaultdict(Counter)
+    assignment_totals = Counter()
     taxa_totals = Counter()
     taxa_samples = defaultdict(set)
     asvs = set()
@@ -253,8 +332,10 @@ def render_report(config, paths, output_path):
         if not sample or abundance <= 0:
             continue
         domain = (row.get("Domain") or "Unassigned").strip() or "Unassigned"
+        assignment = sequence_assignment(row)
         taxon = taxonomy_label(row)
         domains_by_sample[sample][domain] += abundance
+        assignment_totals[assignment] += abundance
         taxa_totals[taxon] += abundance
         taxa_samples[taxon].add(sample)
         if row.get("ASV_hash"):
@@ -302,6 +383,29 @@ def render_report(config, paths, output_path):
         f"<tr><td>{index}</td><td>{esc(taxon)}</td><td>{fmt_count(value)}</td><td>{len(taxa_samples[taxon])}</td></tr>"
         for index, (taxon, value) in enumerate(taxa_totals.most_common(20), 1)
     )
+    assignment_order = [
+        "Prokaryotic 16S",
+        "Eukaryotic 18S",
+        "Chloroplast 16S",
+        "Mitochondrial 16S",
+        "Unassigned",
+        "Other",
+    ]
+    assignment_total = sum(assignment_totals.values())
+    total_16s = sum(
+        assignment_totals[category]
+        for category in (
+            "Prokaryotic 16S", "Chloroplast 16S", "Mitochondrial 16S"
+        )
+    )
+    assignment_summary = [("Total 16S", total_16s)] + [
+        (category, assignment_totals[category]) for category in assignment_order
+    ]
+    assignment_rows = "".join(
+        f"<tr><td>{esc(category)}</td><td>{fmt_count(value)}</td>"
+        f"<td>{fmt_percent(value / assignment_total if assignment_total else None)}</td></tr>"
+        for category, value in assignment_summary
+    )
     internal_paths = [path for path in paths.get("internal_standard_figures", []) if Path(path).is_file()]
     internal_section = ""
     if internal_paths:
@@ -313,6 +417,7 @@ def render_report(config, paths, output_path):
         </section>"""
 
     domain_chart = svg_composition({sample: domains_by_sample[sample] for sample in ordered_samples if domains_by_sample[sample]}, "Domain composition by sample")
+    assignment_chart = svg_assignment_counts(assignment_totals)
     taxa_chart = svg_top_taxa(taxa_totals)
     generated = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
     study = config.get("studyName", "Amplicon run")
@@ -344,7 +449,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">DADA2 processing</div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
-<section id="composition"><div class="eyebrow">Basic bar plot</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}</section>
+<section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Most abundant taxa</h2><p>For SILVA assignments this uses phylum where available; for PR2 it uses division or supergroup.</p>{taxa_chart}<h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></section>
 {internal_section}
 </main></body></html>"""
