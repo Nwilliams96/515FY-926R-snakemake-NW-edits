@@ -2,6 +2,10 @@
 
 This workflow is in progress and is not yet ready for production use.
 
+Use the [interactive pipeline tutorial and configuration builder](https://www.nathanlrwilliams.com/eASV-Pipeline-Tutorial/)
+to prepare a study-specific setup package. The tutorial's HTTPS clone command
+downloads the current version of this repository's `main` branch.
+
 ## Requirements
 
 Install [Git](https://git-scm.com/downloads) and
