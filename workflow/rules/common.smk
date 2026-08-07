@@ -12,6 +12,35 @@ from snakemake.utils import validate
 USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
 
+# DADA2 parameters are configurable per marker-gene path. These fallbacks are
+# the values used by the workflow before the controls were exposed, so older
+# study configs remain reproducible after updating the pipeline.
+DADA2_CONFIG = config.get("dada2", {})
+DADA2_PROK_CONFIG = DADA2_CONFIG.get("prokaryotes", {})
+DADA2_EUK_CONFIG = DADA2_CONFIG.get("eukaryotes", {})
+
+DADA2_PROK_DEFAULTS = {
+    "max_ee_f": 2.0,
+    "max_ee_r": 2.0,
+    "trunc_q": 2,
+    "min_overlap": 12,
+    "pooling_method": "independent",
+    "chimera_method": "consensus",
+    "min_fold_parent_over_abundance": 1.0,
+    "n_reads_learn": 1000000,
+}
+DADA2_EUK_DEFAULTS = {
+    "max_ee": 2.0,
+    "trunc_q": 0,
+    "pooling_method": "independent",
+    "chimera_method": "consensus",
+    "min_fold_parent_over_abundance": 1.0,
+    "n_reads_learn": 1000000,
+}
+
+DADA2_PROK = {**DADA2_PROK_DEFAULTS, **DADA2_PROK_CONFIG}
+DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
+
 # New configs store internal standards as an ordered YAML list. Continue to
 # accept the older intstd1/intstd2/intstd3 mapping so existing studies remain
 # runnable after updating the workflow.

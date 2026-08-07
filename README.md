@@ -41,6 +41,16 @@ The cloned repository intentionally does not include a `config/` folder. Create
 and download the study-specific setup package from the pipeline tutorial, then
 place its complete `config/` folder in the repository before running Snakemake.
 
+## DADA2 controls
+
+The tutorial exposes separate DADA2 settings for the paired 16S path and the
+concatenated, single-end 18S path. Generated configs contain a `dada2` block
+covering expected-error filtering, quality truncation, paired-read overlap,
+pooling, chimera detection, parent abundance, and error-model training reads.
+The displayed presets reproduce the pipeline's historical settings. Configs
+created before this block was introduced remain supported through matching
+workflow defaults.
+
 ## Run report
 
 The final workflow target creates a self-contained report at:

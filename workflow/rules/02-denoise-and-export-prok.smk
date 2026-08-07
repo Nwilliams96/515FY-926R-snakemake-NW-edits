@@ -34,7 +34,15 @@ rule denoise_prok_dada2:
         "results/02-proks/16S.qza"
     params:
         truncR1=config["trunclens"]["truncR1"],
-        truncR2=config["trunclens"]["truncR2"]
+        truncR2=config["trunclens"]["truncR2"],
+        max_ee_f=DADA2_PROK["max_ee_f"],
+        max_ee_r=DADA2_PROK["max_ee_r"],
+        trunc_q=DADA2_PROK["trunc_q"],
+        min_overlap=DADA2_PROK["min_overlap"],
+        pooling_method=DADA2_PROK["pooling_method"],
+        chimera_method=DADA2_PROK["chimera_method"],
+        min_fold_parent_over_abundance=DADA2_PROK["min_fold_parent_over_abundance"],
+        n_reads_learn=DADA2_PROK["n_reads_learn"]
     output:
         directory("results/02-proks/03-DADA2d/"),
         prokrepseqs="results/02-proks/03-DADA2d/representative_sequences.qza",

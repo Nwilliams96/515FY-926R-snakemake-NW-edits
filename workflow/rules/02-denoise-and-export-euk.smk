@@ -92,6 +92,13 @@ rule visualize_quality_single_seqs:
 rule denoise_euk_dada2:
     input:
         "results/02-euks/18S-concat.qza"
+    params:
+        max_ee=DADA2_EUK["max_ee"],
+        trunc_q=DADA2_EUK["trunc_q"],
+        pooling_method=DADA2_EUK["pooling_method"],
+        chimera_method=DADA2_EUK["chimera_method"],
+        min_fold_parent_over_abundance=DADA2_EUK["min_fold_parent_over_abundance"],
+        n_reads_learn=DADA2_EUK["n_reads_learn"]
     output:
         directory("results/02-euks/08-DADA2d/"),
         eukrepseqs="results/02-euks/08-DADA2d/representative_sequences.qza",
