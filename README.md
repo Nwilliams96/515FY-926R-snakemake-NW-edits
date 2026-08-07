@@ -23,6 +23,20 @@ Run this workflow with `--use-conda`. On the first run, Snakemake downloads and
 creates the rule-specific QIIME 2, R, BLAST, BBMap, and utility environments.
 Subsequent runs reuse them.
 
+When internal-standard correction is enabled, `intstds` is an ordered list and
+may contain one or more unique standard IDs:
+
+```yaml
+use_internal_standards: true
+intstds:
+  - "ISD_1"
+  - "ISD_2"
+```
+
+Each ID requires a matching `<ID>_ng` column in `config/samples.tsv` and a
+matching row in `config/internal_stds.tsv`. Older configs that use the
+`intstd1`/`intstd2`/`intstd3` mapping remain supported.
+
 The cloned repository intentionally does not include a `config/` folder. Create
 and download the study-specific setup package from the pipeline tutorial, then
 place its complete `config/` folder in the repository before running Snakemake.

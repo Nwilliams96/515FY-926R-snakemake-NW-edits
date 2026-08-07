@@ -1,222 +1,315 @@
-#This script was written to convert ASV copies into ASV absolute copies by correcting data with internal standards. 
-#It can only be used if genomic internal standards were added at the time of DNA extraction.
-#Written by Nathan Williams 18/02/2026.
+# Convert ASV sequence counts into estimated absolute copies using any positive
+# number of genomic internal standards added at DNA extraction.
 
 suppressPackageStartupMessages({
-library(tidyverse)
+  library(tidyverse)
 })
 
-#Set paths
-isd_path  <- snakemake@input[["isd"]]
-isd_added_path <- snakemake@input[["isd_added"]]
-cruise_tag <- snakemake@config[["studyName"]]
-isd_1_id <- snakemake@params[["intstd1name"]]
-isd_2_id <- snakemake@params[["intstd2name"]]
-isd_3_id <- snakemake@params[["intstd3name"]]
-configured_standard_names <- paste(c(isd_1_id, isd_2_id, isd_3_id), collapse = ", ")
-outdir <- "results/05-internal-std-corrected"
-dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-figure_dir <- "results/06-figures"
-dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+standard_ids <- as.character(unlist(
+  snakemake@params[["standard_ids"]], use.names = FALSE
+))
+standard_slots <- as.character(unlist(
+  snakemake@params[["standard_slots"]], use.names = FALSE
+))
+standard_asv_paths <- as.character(unlist(
+  snakemake@input[["standard_asvs"]], use.names = FALSE
+))
+method_table_outputs <- as.character(unlist(
+  snakemake@output[["method_tables"]], use.names = FALSE
+))
 
-write_isd_table <- function(df, stem) {
-  readr::write_tsv(df, file.path(outdir, paste0(cruise_tag, ".", stem, ".tsv")))
+if (length(standard_ids) < 1) {
+  stop("At least one internal standard is required for correction")
+}
+if (length(unique(standard_ids)) != length(standard_ids)) {
+  stop("Configured internal-standard IDs must be unique")
+}
+if (length(standard_slots) != length(standard_ids) ||
+    length(standard_asv_paths) != length(standard_ids)) {
+  stop("Internal-standard IDs, slots, and ASV-list inputs are not aligned")
 }
 
-#Import Data
-asv_table <- read_tsv(snakemake@input[["asv_table"]])
-isd <- read_tsv(isd_path , show_col_types = FALSE)
-isd_added <- read_tsv(isd_added_path, show_col_types = FALSE) %>%
-  rename(
-    SampleID = sample,
-    isd_1_ng = all_of(paste0(isd_1_id, "_ng")),
-    isd_2_ng = all_of(paste0(isd_2_id, "_ng")),
-    isd_3_ng = all_of(paste0(isd_3_id, "_ng"))
-  ) %>%
+configured_standard_names <- paste(standard_ids, collapse = ", ")
+cruise_tag <- snakemake@config[["studyName"]]
+outdir <- "results/05-internal-std-corrected"
+figure_dir <- "results/06-figures"
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+
+read_asv_ids <- function(path) {
+  values <- trimws(readLines(path, warn = FALSE))
+  unique(values[nzchar(values)])
+}
+
+row_summary <- function(values, summary_function) {
+  apply(as.matrix(values), 1, function(row) {
+    if (all(is.na(row))) NA_real_ else summary_function(row, na.rm = TRUE)
+  })
+}
+
+make_wide_table <- function(data, copy_column) {
+  data %>%
+    select(SampleID, ASV_hash, all_of(copy_column)) %>%
+    group_by(ASV_hash, SampleID) %>%
+    summarise(Abundance = sum(.data[[copy_column]], na.rm = TRUE), .groups = "drop") %>%
+    pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
+}
+
+# Input data and validation -------------------------------------------------
+asv_table <- read_tsv(snakemake@input[["asv_table"]], show_col_types = FALSE)
+isd <- read_tsv(snakemake@input[["isd"]], show_col_types = FALSE)
+isd_added <- read_tsv(snakemake@input[["isd_added"]], show_col_types = FALSE) %>%
+  rename(SampleID = sample) %>%
   mutate(SampleID = str_replace_all(SampleID, "_", "-"))
-samples <- isd_added
 
-#Import Data local
-isd_1_asvs <- read_delim(snakemake@input[[2]], delim = "\n", col_names = FALSE)
-isd_2_asvs <- read_delim(snakemake@input[[3]], delim = "\n", col_names = FALSE)
-isd_3_asvs <- read_delim(snakemake@input[[4]], delim = "\n", col_names = FALSE)
+required_isd_columns <- c(
+  "internal_std_ID", "rRNA_copy_number", "genome_len_bp"
+)
+missing_isd_columns <- setdiff(required_isd_columns, names(isd))
+if (length(missing_isd_columns) > 0) {
+  stop(
+    "config/internal_stds.tsv is missing column(s): ",
+    paste(missing_isd_columns, collapse = ", ")
+  )
+}
 
-#Make the ISD dataframe lookup vectors
-genome_len  <- setNames(isd$genome_len_bp, isd$internal_std_ID)
-copy_number <- setNames(isd$rRNA_copy_number, isd$internal_std_ID)
+amount_columns <- paste0(standard_ids, "_ng")
+required_sample_columns <- c(
+  "SampleID", amount_columns, "internal_std_normalization_factor", "units"
+)
+missing_sample_columns <- setdiff(required_sample_columns, names(isd_added))
+if (length(missing_sample_columns) > 0) {
+  stop(
+    "config/samples.tsv is missing column(s): ",
+    paste(missing_sample_columns, collapse = ", ")
+  )
+}
 
-#Calculate copies of each ISD added
-#Set parameters
+isd_lookup <- isd %>%
+  transmute(
+    StandardID = as.character(internal_std_ID),
+    rRNA_copy_number = as.numeric(rRNA_copy_number),
+    genome_len_bp = as.numeric(genome_len_bp)
+  )
+if (anyDuplicated(isd_lookup$StandardID)) {
+  stop("config/internal_stds.tsv contains duplicate internal_std_ID values")
+}
+missing_standard_rows <- setdiff(standard_ids, isd_lookup$StandardID)
+if (length(missing_standard_rows) > 0) {
+  stop(
+    "Configured internal standard(s) missing from config/internal_stds.tsv: ",
+    paste(missing_standard_rows, collapse = ", ")
+  )
+}
+if (any(
+  is.na(isd_lookup$rRNA_copy_number) | isd_lookup$rRNA_copy_number <= 0 |
+    is.na(isd_lookup$genome_len_bp) | isd_lookup$genome_len_bp <= 0
+)) {
+  stop("Internal-standard copy numbers and genome lengths must be positive numbers")
+}
+
+standard_lookup <- tibble(
+  StandardID = standard_ids,
+  StandardSlot = standard_slots,
+  amount_column = amount_columns
+)
+
+# Copies added and recovered -----------------------------------------------
 bp_weight <- 617.9
-avogadro <- 6.022 * 1e23
-# 1e9 is to convert to copies added per L.
+avogadro <- 6.022e23
 
-isd_1len=isd$genome_len_bp[isd$internal_std_ID == isd_1_id]
-isd_2len=isd$genome_len_bp[isd$internal_std_ID == isd_2_id]
-isd_3len=isd$genome_len_bp[isd$internal_std_ID == isd_3_id]
-
-isd_1copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_1_id]
-isd_2copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_2_id]
-isd_3copynum=isd$rRNA_copy_number[isd$internal_std_ID == isd_3_id]
-
-# Do calculation
-isd_copies_added <- isd_added %>% 
-  select(SampleID, isd_1_ng, isd_2_ng, isd_3_ng) %>%
-  mutate(isd_3_copies = ((((isd_3_ng/1e9) / (bp_weight * isd_3len)) * avogadro) * isd_3copynum)) %>%
-  mutate(isd_2_copies = ((((isd_2_ng/1e9) / (bp_weight * isd_2len)) * avogadro) * isd_2copynum)) %>%
-  mutate(isd_1_copies = ((((isd_1_ng/1e9) / (bp_weight * isd_1len)) * avogadro) * isd_1copynum))
-          
-#Pull internal standard copies out of ASV table frame
-isd_1_ids <- pull(isd_1_asvs) %>% as.character()
-isd_2_ids <- pull(isd_2_asvs) %>% as.character()
-isd_3_ids <- pull(isd_3_asvs) %>% as.character()
-
-isd_1_by_sample <- asv_table %>%
-  filter(ASV_hash %in% isd_1_ids) %>%
-  group_by(SampleID) %>%
-  summarize(isd_1_copies_recovered = sum(Corrected_Sequence_Counts, na.rm = TRUE), .groups = "drop")
-
-isd_2_by_sample <- asv_table %>%
-  filter(ASV_hash %in% isd_2_ids) %>%
-  group_by(SampleID) %>%
-  summarize(isd_2_copies_recovered = sum(Corrected_Sequence_Counts, na.rm = TRUE), .groups = "drop")
-
-isd_3_by_sample <- asv_table %>%
-  filter(ASV_hash %in% isd_3_ids) %>%
-  group_by(SampleID) %>%
-  summarize(isd_3_copies_recovered = sum(Corrected_Sequence_Counts, na.rm = TRUE), .groups = "drop")
-
-#Now calculate recovery ratio
-merged_isd_data <- isd_copies_added %>%
-  left_join(isd_1_by_sample) %>%
-  left_join(isd_2_by_sample) %>%
-  left_join(isd_3_by_sample)
-
-#Calculate per-ISD recovery ratio columns (recovered / added)
-merged_isd_data <- merged_isd_data %>%
-  mutate(isd_3_recovery_ratio = isd_3_copies_recovered / isd_3_copies) %>%
-  mutate(isd_1_recovery_ratio = isd_1_copies_recovered / isd_1_copies) %>%
-  mutate(isd_2_recovery_ratio = isd_2_copies_recovered / isd_2_copies)
-
-#Calculate the mean and median of all three combinations, as well as each combination of two.
-merged_isd_data <- merged_isd_data %>%
-  rowwise() %>%
-  mutate(recovery_mean = mean( c(isd_1_recovery_ratio, isd_2_recovery_ratio, isd_3_recovery_ratio), na.rm = TRUE),
-  recovery_median = median(c(isd_1_recovery_ratio, isd_2_recovery_ratio, isd_3_recovery_ratio),na.rm = TRUE),
-  isd_1_isd_2_mean_recovery_ratio = mean( c(isd_1_recovery_ratio, isd_2_recovery_ratio), na.rm = TRUE),
-  isd_1_isd_3_mean_recovery_ratio = mean( c(isd_1_recovery_ratio, isd_3_recovery_ratio), na.rm = TRUE),
-  isd_2_isd_3_mean_recovery_ratio = mean( c(isd_2_recovery_ratio, isd_3_recovery_ratio), na.rm = TRUE)
-  ) %>%
-  ungroup()
-
-#Make a subset of data for the plots
-plot_data <- merged_isd_data %>%
-  select(SampleID, isd_3_recovery_ratio, isd_1_recovery_ratio, isd_2_recovery_ratio, recovery_mean, 
-         isd_1_isd_2_mean_recovery_ratio, isd_1_isd_3_mean_recovery_ratio, isd_2_isd_3_mean_recovery_ratio) %>%
+copies_added <- isd_added %>%
+  select(SampleID, all_of(amount_columns)) %>%
   pivot_longer(
-    cols = c(isd_3_recovery_ratio, isd_1_recovery_ratio, isd_2_recovery_ratio, recovery_mean, 
-             isd_1_isd_2_mean_recovery_ratio, isd_1_isd_3_mean_recovery_ratio, isd_2_isd_3_mean_recovery_ratio),
-    names_to = "Method",
+    cols = all_of(amount_columns),
+    names_to = "amount_column",
+    values_to = "amount_ng"
+  ) %>%
+  left_join(standard_lookup, by = "amount_column") %>%
+  left_join(isd_lookup, by = "StandardID") %>%
+  mutate(
+    amount_ng = as.numeric(amount_ng),
+    copies_added = (((amount_ng / 1e9) /
+      (bp_weight * genome_len_bp)) * avogadro) * rRNA_copy_number
+  )
+
+recovered_by_standard <- map2_dfr(
+  standard_slots,
+  standard_asv_paths,
+  function(slot, path) {
+    standard_asvs <- read_asv_ids(path)
+    recovered <- asv_table %>%
+      filter(ASV_hash %in% standard_asvs) %>%
+      group_by(SampleID) %>%
+      summarise(copies_recovered = sum(Corrected_Sequence_Counts, na.rm = TRUE),
+                .groups = "drop")
+
+    isd_added %>%
+      distinct(SampleID) %>%
+      left_join(recovered, by = "SampleID") %>%
+      mutate(
+        StandardSlot = slot,
+        copies_recovered = replace_na(copies_recovered, 0)
+      )
+  }
+)
+
+recovery_long <- copies_added %>%
+  left_join(recovered_by_standard, by = c("SampleID", "StandardSlot")) %>%
+  mutate(
+    copies_recovered = replace_na(copies_recovered, 0),
+    recovery_ratio = if_else(
+      !is.na(copies_added) & copies_added > 0,
+      copies_recovered / copies_added,
+      NA_real_
+    )
+  )
+
+recovery_wide <- recovery_long %>%
+  select(SampleID, StandardSlot, recovery_ratio) %>%
+  pivot_wider(
+    names_from = StandardSlot,
+    values_from = recovery_ratio,
+    names_glue = "{StandardSlot}_recovery_ratio"
+  )
+
+standard_ratio_columns <- paste0(standard_slots, "_recovery_ratio")
+recovery_wide$recovery_mean <- row_summary(
+  recovery_wide[standard_ratio_columns], mean
+)
+recovery_wide$recovery_median <- row_summary(
+  recovery_wide[standard_ratio_columns], median
+)
+
+pair_indexes <- if (length(standard_slots) >= 2) {
+  combn(seq_along(standard_slots), 2, simplify = FALSE)
+} else {
+  list()
+}
+pair_ratio_columns <- character()
+pair_labels <- character()
+for (pair in pair_indexes) {
+  pair_slots <- standard_slots[pair]
+  pair_column <- paste0(
+    paste(pair_slots, collapse = "_"), "_mean_recovery_ratio"
+  )
+  recovery_wide[[pair_column]] <- row_summary(
+    recovery_wide[paste0(pair_slots, "_recovery_ratio")], mean
+  )
+  pair_ratio_columns <- c(pair_ratio_columns, pair_column)
+  pair_labels <- c(pair_labels, paste(standard_ids[pair], collapse = " + "))
+}
+
+# Define all correction methods in one ordered table. This order matches the
+# output list assembled in the Snakemake rule.
+method_specs <- bind_rows(
+  tibble(
+    stem = paste0(standard_slots, "_recovery_ratio"),
+    ratio_column = standard_ratio_columns,
+    label = paste0(standard_ids, " only")
+  ),
+  tibble(
+    stem = c("mean_recovery_ratio", "median_recovery_ratio"),
+    ratio_column = c("recovery_mean", "recovery_median"),
+    label = c(
+      paste0("Mean: ", configured_standard_names),
+      paste0("Median: ", configured_standard_names)
+    )
+  ),
+  tibble(
+    stem = pair_ratio_columns,
+    ratio_column = pair_ratio_columns,
+    label = pair_labels
+  )
+) %>%
+  mutate(copy_column = paste0("Copies_", stem))
+
+if (length(method_table_outputs) != nrow(method_specs)) {
+  stop("The number of correction-table outputs does not match the methods")
+}
+
+# Recovery-ratio figure -----------------------------------------------------
+plot_data <- recovery_wide %>%
+  select(SampleID, all_of(method_specs$ratio_column)) %>%
+  pivot_longer(
+    cols = -SampleID,
+    names_to = "ratio_column",
     values_to = "Recovery"
   ) %>%
+  left_join(method_specs %>% select(ratio_column, Method = label),
+            by = "ratio_column") %>%
   filter(!is.na(Recovery))
 
-#means dataframe
-means_df <- plot_data %>% filter(Method %in% c("recovery_mean")) %>%
+means_df <- plot_data %>%
+  filter(ratio_column == "recovery_mean") %>%
   distinct(SampleID, Recovery)
 
-# Use the configured standard names in figure legends instead of slot numbers.
-plot_data <- plot_data %>%
-  mutate(Method = recode(
-    Method,
-    "isd_1_recovery_ratio" = paste0(isd_1_id, " only"),
-    "isd_2_recovery_ratio" = paste0(isd_2_id, " only"),
-    "isd_3_recovery_ratio" = paste0(isd_3_id, " only"),
-    "recovery_mean" = "Mean of all three standards",
-    "isd_1_isd_2_mean_recovery_ratio" = paste(isd_1_id, "+", isd_2_id),
-    "isd_1_isd_3_mean_recovery_ratio" = paste(isd_1_id, "+", isd_3_id),
-    "isd_2_isd_3_mean_recovery_ratio" = paste(isd_2_id, "+", isd_3_id)
-  ))
-
-#Generate a plot to compare ratios
 plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
   geom_point(position = position_jitter(width = 0.15, height = 0), size = 2.5) +
-  geom_line(data = means_df, aes(x = SampleID, y = Recovery, group = 1),
-            inherit.aes = FALSE, colour = "black", linewidth = 1) +
+  geom_line(
+    data = means_df,
+    aes(x = SampleID, y = Recovery, group = 1),
+    inherit.aes = FALSE,
+    colour = "black",
+    linewidth = 1
+  ) +
   theme_minimal() +
-  scale_colour_brewer(palette = "Dark2", name = "Correction method") +
-  labs(title = "Recovery Ratios per Sample",
-       subtitle = paste0("Configured standards: ", configured_standard_names, ". Black line = per-sample mean."),
-       y = "Recovery Ratio",
-       x = "Sample") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), legend.position = "bottom")
+  scale_colour_discrete(name = "Correction method") +
+  labs(
+    title = "Recovery Ratios per Sample",
+    subtitle = paste0(
+      "Configured standards: ", configured_standard_names,
+      ". Black line = per-sample mean."
+    ),
+    y = "Recovery Ratio",
+    x = "Sample"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "bottom"
+  )
 
-#Choose your method
-recovery_ratios <- merged_isd_data %>% select(c("SampleID", "isd_3_recovery_ratio", "isd_1_recovery_ratio", "isd_2_recovery_ratio" ,
-                                                "recovery_mean", "recovery_median", "isd_1_isd_2_mean_recovery_ratio", 
-                                                "isd_1_isd_3_mean_recovery_ratio", "isd_2_isd_3_mean_recovery_ratio"))
-
-#Join in recovery ratio
+# Apply each correction method ---------------------------------------------
 asv_table <- asv_table %>%
-  left_join(recovery_ratios)
+  left_join(recovery_wide, by = "SampleID") %>%
+  left_join(
+    isd_added %>%
+      select(SampleID, internal_std_normalization_factor, units),
+    by = "SampleID"
+  )
 
+for (index in seq_len(nrow(method_specs))) {
+  ratio_column <- method_specs$ratio_column[[index]]
+  copy_column <- method_specs$copy_column[[index]]
+  asv_table[[copy_column]] <-
+    (asv_table$Corrected_Sequence_Counts / asv_table[[ratio_column]]) /
+    asv_table$internal_std_normalization_factor
+}
 
-#add in unit for normalisation
-isd_norm_fact <- samples %>% 
-  select(SampleID,internal_std_normalization_factor,units)
-  
-asv_table <- asv_table %>% left_join(isd_norm_fact)
-  
-#Calculate recovery ratio
+all_internal_standard_asvs <- unique(unlist(
+  map(standard_asv_paths, read_asv_ids), use.names = FALSE
+))
 asv_table <- asv_table %>%
-  mutate(Copies_isd_1_recovery_ratio = (Corrected_Sequence_Counts / isd_1_recovery_ratio)/internal_std_normalization_factor) %>%
-  mutate(Copies_isd_2_recovery_ratio = (Corrected_Sequence_Counts / isd_2_recovery_ratio)/internal_std_normalization_factor) %>%
-  mutate(Copies_isd_3_recovery_ratio = (Corrected_Sequence_Counts / isd_3_recovery_ratio)/internal_std_normalization_factor) %>%
-  mutate(Copies_mean_recovery_ratio = (Corrected_Sequence_Counts / recovery_mean)/internal_std_normalization_factor) %>%
-  mutate(Copies_median_recovery_ratio = (Corrected_Sequence_Counts / recovery_median)/internal_std_normalization_factor) %>%
-  mutate(Copies_isd_1_isd_2_mean_recovery_ratio = (Corrected_Sequence_Counts /isd_1_isd_2_mean_recovery_ratio)/internal_std_normalization_factor) %>%
-  mutate(Copies_isd_1_isd_3_mean_recovery_ratio = (Corrected_Sequence_Counts /isd_1_isd_3_mean_recovery_ratio)/internal_std_normalization_factor) %>%
-  mutate(Copies_isd_2_isd_3_mean_recovery_ratio = (Corrected_Sequence_Counts /isd_2_isd_3_mean_recovery_ratio)/internal_std_normalization_factor)
+  filter(!ASV_hash %in% all_internal_standard_asvs)
 
-#Remove ISDs from the data
-asv_table <- asv_table %>%
-  filter(!ASV_hash %in% isd_1_ids) %>%
-  filter(!ASV_hash %in% isd_2_ids) %>%
-  filter(!ASV_hash %in% isd_3_ids)
-
-Domain_Totals <- asv_table %>%
-  filter(!Domain %in% c("Unassigned")) %>%
+# Domain totals figure ------------------------------------------------------
+domain_totals_long <- asv_table %>%
+  filter(!Domain %in% "Unassigned") %>%
   group_by(SampleID, Domain) %>%
   summarise(
-    Total_isd_3_recovery_ratio     = sum(Copies_isd_3_recovery_ratio, na.rm = TRUE),
-    Total_isd_1_recovery_ratio     = sum(Copies_isd_1_recovery_ratio, na.rm = TRUE),
-    Total_isd_2_recovery_ratio     = sum(Copies_isd_2_recovery_ratio, na.rm = TRUE),
-    Total_mean_recovery_ratio   = sum(Copies_mean_recovery_ratio, na.rm = TRUE),
-    Total_median_recovery_ratio = sum(Copies_median_recovery_ratio, na.rm = TRUE),
-    Total_isd_1_isd_2_mean_recovery_ratio = sum(Copies_isd_1_isd_2_mean_recovery_ratio, na.rm = TRUE),
-    Total_isd_1_isd_3_mean_recovery_ratio = sum(Copies_isd_1_isd_3_mean_recovery_ratio, na.rm = TRUE),
-    Total_isd_2_isd_3_mean_recovery_ratio = sum(Copies_isd_2_isd_3_mean_recovery_ratio, na.rm = TRUE),
+    across(all_of(method_specs$copy_column), ~sum(.x, na.rm = TRUE)),
     .groups = "drop"
-  )
-  
-Domain_Totals_long <- Domain_Totals %>%
+  ) %>%
   pivot_longer(
-    cols = starts_with("Total_"),
-    names_to = "Method",
+    cols = all_of(method_specs$copy_column),
+    names_to = "copy_column",
     values_to = "Total_Copies"
   ) %>%
-  mutate(Method = recode(Method,
-                         "Total_isd_3_recovery_ratio" = paste0(isd_3_id, " only"),
-                         "Total_isd_1_recovery_ratio" = paste0(isd_1_id, " only"),
-                         "Total_isd_2_recovery_ratio" = paste0(isd_2_id, " only"),
-                         "Total_mean_recovery_ratio" = paste0("Mean: ", configured_standard_names),
-                         "Total_median_recovery_ratio" = paste0("Median: ", configured_standard_names),
-                         "Total_isd_1_isd_3_mean_recovery_ratio" = paste(isd_1_id, "+", isd_3_id),
-                         "Total_isd_1_isd_2_mean_recovery_ratio" = paste(isd_1_id, "+", isd_2_id),
-                         "Total_isd_2_isd_3_mean_recovery_ratio" = paste(isd_2_id, "+", isd_3_id)))
+  left_join(method_specs %>% select(copy_column, Method = label),
+            by = "copy_column")
 
 plot2 <- ggplot(
-  Domain_Totals_long,
+  domain_totals_long,
   aes(x = SampleID, y = Total_Copies, colour = Domain, group = Domain)
 ) +
   geom_line(linewidth = 1) +
@@ -224,88 +317,50 @@ plot2 <- ggplot(
   scale_y_log10() +
   facet_wrap(~Method, ncol = 1) +
   theme_minimal() +
-  scale_colour_manual(values = c("Bacteria" = "#1F77B4", "Archaea" = "#2CA02C", "Eukaryota" = "#D62728", "Unassigned" = "#7F7F7F")) +
+  scale_colour_manual(values = c(
+    "Bacteria" = "#1F77B4",
+    "Archaea" = "#2CA02C",
+    "Eukaryota" = "#D62728",
+    "Unassigned" = "#7F7F7F"
+  )) +
   labs(
     title = "Total Copies per Unit by Domain and Correction Method",
     y = "Total Copies per unit (log10 scale)",
     x = "Sample"
   ) +
   theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "bottom"
   )
 
-# isd_3 recovery ratio wide table
-asv_table_isd_3_recovery_ratio <- asv_table %>% select(SampleID, ASV_hash, Copies_isd_3_recovery_ratio) %>%
-  group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_3_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
+# Tables --------------------------------------------------------------------
+write_tsv(asv_table, snakemake@output[["corrected"]])
+walk2(
+  method_table_outputs,
+  method_specs$copy_column,
+  function(output_path, copy_column) {
+    write_tsv(make_wide_table(asv_table, copy_column), output_path)
+  }
+)
 
-# isd_1 recovery ratio wide table
-asv_table_isd_1_recovery_ratio <- asv_table %>% select(SampleID, ASV_hash, Copies_isd_1_recovery_ratio) %>% 
-  group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_1_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
+# Figures -------------------------------------------------------------------
+domain_plot_height <- max(8, 2.4 * nrow(method_specs))
 
-# isd_2 recovery ratio wide table
-asv_table_isd_2_recovery_ratio <- asv_table %>% select(SampleID, ASV_hash, Copies_isd_2_recovery_ratio) %>% 
-  group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_2_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-# mean_RR wide table
-asv_table_mean_recovery_ratio <- asv_table %>%
-  select(SampleID, ASV_hash, Copies_mean_recovery_ratio) %>% group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_mean_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-# median_RR wide table
-asv_table_median_recovery_ratio <- asv_table %>%
-  select(SampleID, ASV_hash, Copies_median_recovery_ratio) %>%
-  group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_median_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-# mean_isd_1_isd_2 recovery_ratio wide table
-asv_table_isd_1_isd_2_mean_recovery_ratio <- asv_table %>%
-  select(SampleID, ASV_hash, Copies_isd_1_isd_2_mean_recovery_ratio) %>% group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_1_isd_2_mean_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-# mean_isd_1_isd_3 recovery_ratio wide table
-asv_table_isd_1_isd_3_mean_recovery_ratio <- asv_table %>%
-  select(SampleID, ASV_hash, Copies_isd_1_isd_3_mean_recovery_ratio) %>% group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_1_isd_3_mean_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-# mean_isd_2_isd_3 recovery_ratio wide table
-asv_table_isd_2_isd_3_mean_recovery_ratio <- asv_table %>%
-  select(SampleID, ASV_hash, Copies_isd_2_isd_3_mean_recovery_ratio) %>% group_by(ASV_hash, SampleID) %>%
-  summarise(Abundance = sum(Copies_isd_2_isd_3_mean_recovery_ratio, na.rm = TRUE), .groups = "drop") %>%
-  pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
-
-#Write tsv files - one for each correction method.
-write_isd_table(asv_table, "ISD_corrected_asv_table")
-write_isd_table(asv_table_isd_3_recovery_ratio, "asv_table_isd_3_recovery_ratio")
-write_isd_table(asv_table_isd_1_recovery_ratio, "asv_table_isd_1_recovery_ratio")
-write_isd_table(asv_table_isd_2_recovery_ratio, "asv_table_isd_2_recovery_ratio")
-write_isd_table(asv_table_mean_recovery_ratio, "asv_table_mean_recovery_ratio")
-write_isd_table(asv_table_median_recovery_ratio, "asv_table_median_recovery_ratio")
-write_isd_table(asv_table_isd_1_isd_2_mean_recovery_ratio, "asv_table_isd_1_isd_2_mean_recovery_ratio")
-write_isd_table(asv_table_isd_1_isd_3_mean_recovery_ratio, "asv_table_isd_1_isd_3_mean_recovery_ratio")
-write_isd_table(asv_table_isd_2_isd_3_mean_recovery_ratio, "asv_table_isd_2_isd_3_mean_recovery_ratio")
-
-#Write plots
 pdf(snakemake@output[["recovery_plot"]], width = 12, height = 6)
 print(plot1)
 dev.off()
-pdf(snakemake@output[["domain_plot"]], width = 12, height = 8)
+pdf(snakemake@output[["domain_plot"]], width = 12, height = domain_plot_height)
 print(plot2)
 dev.off()
 
-# PNG copies are embedded directly in the final self-contained HTML report.
 png(snakemake@output[["recovery_plot_png"]], width = 1800, height = 900, res = 150)
 print(plot1)
 dev.off()
-png(snakemake@output[["domain_plot_png"]], width = 1800, height = 1200, res = 150)
+png(
+  snakemake@output[["domain_plot_png"]],
+  width = 1800,
+  height = max(1200, 360 * nrow(method_specs)),
+  res = 150
+)
 print(plot2)
 dev.off()

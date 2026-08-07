@@ -20,13 +20,14 @@ with open(snakemake.input[0], newline="", encoding="utf-8") as handle:
         raise ValueError("config/internal_stds.tsv contains duplicate internal_std_ID values")
 
 
-configured_ids = {
-    slot: str(snakemake.params[f"{slot}name"]).strip()
-    for slot in ("intstd1", "intstd2", "intstd3")
-}
-if len(set(configured_ids.values())) != 3:
-    raise ValueError("The three configured internal standard names must be unique")
-for standard_id in configured_ids.values():
+configured_ids = [
+    str(standard_id).strip() for standard_id in snakemake.params.standard_ids
+]
+if not configured_ids:
+    raise ValueError("At least one internal standard must be configured")
+if len(set(configured_ids)) != len(configured_ids):
+    raise ValueError("Configured internal standard names must be unique")
+for standard_id in configured_ids:
     if not re.fullmatch(r"[A-Za-z0-9._-]+", standard_id):
         raise ValueError(
             f"Internal standard name {standard_id!r} may contain only letters, "
@@ -34,11 +35,15 @@ for standard_id in configured_ids.values():
         )
 
 
-for slot, standard_id in configured_ids.items():
+output_paths = list(snakemake.output.fastas)
+if len(output_paths) != len(configured_ids):
+    raise ValueError("Expected one FASTA output per configured internal standard")
+
+for standard_id, output_name in zip(configured_ids, output_paths):
     if standard_id not in standards:
         raise ValueError(
-            f"Internal standard {standard_id!r} is configured as {slot} but is "
-            "not present in config/internal_stds.tsv"
+            f"Configured internal standard {standard_id!r} is not present in "
+            "config/internal_stds.tsv"
         )
 
     sequence = re.sub(
@@ -51,6 +56,6 @@ for slot, standard_id in configured_ids.items():
             f"Internal standard {standard_id!r} contains invalid nucleotide symbols"
         )
 
-    output_path = Path(snakemake.output[slot])
+    output_path = Path(output_name)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(f">{standard_id}\n{sequence}\n", encoding="utf-8")

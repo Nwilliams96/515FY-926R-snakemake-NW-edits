@@ -14,40 +14,55 @@ SCRIPT = (
 
 
 class PrepareInternalStandardFastasTest(unittest.TestCase):
-    def test_creates_one_valid_fasta_per_configured_standard(self):
+    def run_script(self, root, rows, configured_ids):
+        table = root / "internal_stds.tsv"
+        table.write_text(
+            "internal_std_ID\trRNA_copy_number\tgenome_len_bp\tfull_16S_sequence\n"
+            + "".join(
+                f"{standard_id}\t{copies}\t{genome}\t{sequence}\n"
+                for standard_id, copies, genome, sequence in rows
+            ),
+            encoding="utf-8",
+        )
+        output_paths = [root / f"{standard_id}.fasta" for standard_id in configured_ids]
+        snakemake = SimpleNamespace(
+            input=[str(table)],
+            output=SimpleNamespace(fastas=[str(path) for path in output_paths]),
+            params=SimpleNamespace(standard_ids=configured_ids),
+        )
+
+        runpy.run_path(str(SCRIPT), init_globals={"snakemake": snakemake})
+        return output_paths
+
+    def test_creates_one_fasta(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            table = root / "internal_stds.tsv"
-            table.write_text(
-                "internal_std_ID\trRNA_copy_number\tgenome_len_bp\tfull_16S_sequence\n"
-                "Custom-A\t5\t100\tACGT\n"
-                "Custom_B\t2\t200\tNNAA\n"
-                "SpikeIn3\t1\t300\tRYGC\n",
-                encoding="utf-8",
-            )
-            outputs = {
-                slot: str(root / f"{slot}.fasta")
-                for slot in ("intstd1", "intstd2", "intstd3")
-            }
-            snakemake = SimpleNamespace(
-                input=[str(table)],
-                output=outputs,
-                params={
-                    "intstd1name": "Custom-A",
-                    "intstd2name": "Custom_B",
-                    "intstd3name": "SpikeIn3",
-                },
-            )
-
-            runpy.run_path(str(SCRIPT), init_globals={"snakemake": snakemake})
-
-            self.assertEqual(
-                (root / "intstd1.fasta").read_text(encoding="utf-8"),
-                ">Custom-A\nACGT\n",
+            outputs = self.run_script(
+                root,
+                [("Only-Standard", 5, 100, "ACGT")],
+                ["Only-Standard"],
             )
             self.assertEqual(
-                (root / "intstd2.fasta").read_text(encoding="utf-8"),
-                ">Custom_B\nNNAA\n",
+                outputs[0].read_text(encoding="utf-8"),
+                ">Only-Standard\nACGT\n",
+            )
+
+    def test_creates_more_than_three_fastas_in_configured_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = [
+                ("Custom-A", 5, 100, "ACGT"),
+                ("Custom_B", 2, 200, "NNAA"),
+                ("SpikeIn3", 1, 300, "RYGC"),
+                ("Fourth.std", 3, 400, "BDHV"),
+            ]
+            configured_ids = [row[0] for row in rows]
+            outputs = self.run_script(root, rows, configured_ids)
+
+            self.assertEqual(len(outputs), 4)
+            self.assertEqual(
+                outputs[-1].read_text(encoding="utf-8"),
+                ">Fourth.std\nBDHV\n",
             )
 
 

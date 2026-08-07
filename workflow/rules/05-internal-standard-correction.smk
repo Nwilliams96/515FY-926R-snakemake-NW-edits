@@ -1,73 +1,74 @@
 if USE_INTERNAL_STANDARDS:
 
+    INTERNAL_STANDARD_FASTAS = expand(
+        "config/intstd_fastas/{standard}.fasta",
+        standard=INTERNAL_STANDARD_IDS,
+    )
+    INTERNAL_STANDARD_ASV_LISTS = expand(
+        "config/intstd_fastas/{standard}.asvs.txt",
+        standard=INTERNAL_STANDARD_IDS,
+    )
+    INTERNAL_STANDARD_METHOD_TABLES = expand(
+        "results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_{method}.tsv",
+        method=INTERNAL_STANDARD_METHOD_STEMS,
+    )
+
+
     rule prepare_internal_standard_fastas:
         input:
-            "config/internal_stds.tsv"
+            table="config/internal_stds.tsv"
         output:
-            intstd1="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta",
-            intstd2="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".fasta",
-            intstd3="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".fasta"
+            fastas=INTERNAL_STANDARD_FASTAS
         params:
-            intstd1name=config["intstds"]["intstd1"],
-            intstd2name=config["intstds"]["intstd2"],
-            intstd3name=config["intstds"]["intstd3"]
+            standard_ids=INTERNAL_STANDARD_IDS
         script:
             "../scripts/prepare_internal_standard_fastas.py"
 
+
     rule prepare_16S_BLASTdb:
         input:
-            intstd1=rules.prepare_internal_standard_fastas.output.intstd1,
-            intstd2=rules.prepare_internal_standard_fastas.output.intstd2,
-            intstd3=rules.prepare_internal_standard_fastas.output.intstd3
+            fasta="config/intstd_fastas/{standard}.fasta"
         output:
-            intstd1="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta.nhr",
-            intstd2="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".fasta.nhr",
-            intstd3="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".fasta.nhr"
+            nhr="config/intstd_fastas/{standard}.fasta.nhr"
+        wildcard_constraints:
+            standard="|".join(re.escape(value) for value in INTERNAL_STANDARD_IDS)
         conda:
             "../envs/blast-env.yaml"
-        script:
-            "../scripts/B00-makeblastdb.sh"
+        shell:
+            "makeblastdb -dbtype nucl -in {input.fasta:q} && test -s {output.nhr:q}"
+
 
     rule identify_intsd_ASVS:
         input:
             latestseqs="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_seqs.fasta",
-            intstd1="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".fasta.nhr",
-            intstd2="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".fasta.nhr",
-            intstd3="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".fasta.nhr"
+            database="config/intstd_fastas/{standard}.fasta.nhr"
         output:
-            intstd1tsv="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".asvs.outfmt6.tsv",
-            intstd1asvs="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".asvs.txt",
-            intstd2tsv="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".asvs.outfmt6.tsv",
-            intstd2asvs="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".asvs.txt",
-            intstd3tsv="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".asvs.outfmt6.tsv",
-            intstd3asvs="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".asvs.txt"
+            matches="config/intstd_fastas/{standard}.asvs.outfmt6.tsv",
+            asvs="config/intstd_fastas/{standard}.asvs.txt"
+        wildcard_constraints:
+            standard="|".join(re.escape(value) for value in INTERNAL_STANDARD_IDS)
+        params:
+            database=lambda wildcards: f"config/intstd_fastas/{wildcards.standard}.fasta"
         conda:
             "../envs/blast-env.yaml"
-        script:
-            "../scripts/B01-blast-ASVs.sh"
+        shell:
+            "blastn -query {input.latestseqs:q} -db {params.database:q} "
+            "-outfmt 6 -perc_identity 99 -qcov_hsp_perc 100 > {output.matches:q} "
+            "&& cut -f1 {output.matches:q} > {output.asvs:q}"
+
 
     rule intstd_correct_data:
         input:
             asv_table="results/04-formatted/" + config["studyName"] + ".long_data.tsv",
-            intstd1asvs="config/intstd_fastas/" + config["intstds"]["intstd1"] + ".asvs.txt",
-            intstd2asvs="config/intstd_fastas/" + config["intstds"]["intstd2"] + ".asvs.txt",
-            intstd3asvs="config/intstd_fastas/" + config["intstds"]["intstd3"] + ".asvs.txt",
+            standard_asvs=INTERNAL_STANDARD_ASV_LISTS,
             isd="config/internal_stds.tsv",
             isd_added="config/samples.tsv"
         params:
-            intstd1name=config["intstds"]["intstd1"],
-            intstd2name=config["intstds"]["intstd2"],
-            intstd3name=config["intstds"]["intstd3"],
+            standard_ids=INTERNAL_STANDARD_IDS,
+            standard_slots=INTERNAL_STANDARD_SLOTS
         output:
             corrected="results/05-internal-std-corrected/" + config["studyName"] + ".ISD_corrected_asv_table.tsv",
-            isd_1_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_1_recovery_ratio.tsv",
-            isd_2_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_2_recovery_ratio.tsv",
-            isd_3_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_3_recovery_ratio.tsv",
-            mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_mean_recovery_ratio.tsv",
-            median_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_median_recovery_ratio.tsv",
-            isd_1_isd_2_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_1_isd_2_mean_recovery_ratio.tsv",
-            isd_1_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_1_isd_3_mean_recovery_ratio.tsv",
-            isd_2_isd_3_mean_recovery_ratio="results/05-internal-std-corrected/" + config["studyName"] + ".asv_table_isd_2_isd_3_mean_recovery_ratio.tsv",
+            method_tables=INTERNAL_STANDARD_METHOD_TABLES,
             recovery_plot="results/06-figures/" + config["studyName"] + ".recovery_ratios.pdf",
             domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf",
             recovery_plot_png="results/06-figures/" + config["studyName"] + ".recovery_ratios.png",

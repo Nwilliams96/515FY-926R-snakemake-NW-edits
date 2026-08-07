@@ -1,5 +1,7 @@
 # import basic packages
 import os
+import re
+from itertools import combinations
 import pandas as pd
 from snakemake.exceptions import WorkflowError
 from snakemake.utils import validate
@@ -9,6 +11,51 @@ from snakemake.utils import validate
 # run-specific repository clone.
 USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
+
+# New configs store internal standards as an ordered YAML list. Continue to
+# accept the older intstd1/intstd2/intstd3 mapping so existing studies remain
+# runnable after updating the workflow.
+configured_intstds = config.get("intstds", [])
+if isinstance(configured_intstds, dict):
+    INTERNAL_STANDARD_IDS = [
+        str(value).strip() for value in configured_intstds.values()
+    ]
+elif isinstance(configured_intstds, list):
+    INTERNAL_STANDARD_IDS = [str(value).strip() for value in configured_intstds]
+else:
+    raise WorkflowError("intstds must be an ordered list of internal-standard IDs")
+
+if USE_INTERNAL_STANDARDS:
+    if not INTERNAL_STANDARD_IDS:
+        raise WorkflowError(
+            "use_internal_standards is true, but intstds does not contain any IDs"
+        )
+    invalid_internal_standard_ids = [
+        standard_id
+        for standard_id in INTERNAL_STANDARD_IDS
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", standard_id)
+    ]
+    if invalid_internal_standard_ids:
+        raise WorkflowError(
+            "Internal-standard IDs may contain only letters, numbers, periods, "
+            "underscores, and hyphens: "
+            + ", ".join(invalid_internal_standard_ids)
+        )
+    if len(set(INTERNAL_STANDARD_IDS)) != len(INTERNAL_STANDARD_IDS):
+        raise WorkflowError("Internal-standard IDs in intstds must be unique")
+
+INTERNAL_STANDARD_SLOTS = [
+    f"isd_{index}" for index in range(1, len(INTERNAL_STANDARD_IDS) + 1)
+]
+INTERNAL_STANDARD_PAIRS = list(combinations(INTERNAL_STANDARD_SLOTS, 2))
+INTERNAL_STANDARD_METHOD_STEMS = (
+    [f"{slot}_recovery_ratio" for slot in INTERNAL_STANDARD_SLOTS]
+    + ["mean_recovery_ratio", "median_recovery_ratio"]
+    + [
+        f"{first}_{second}_mean_recovery_ratio"
+        for first, second in INTERNAL_STANDARD_PAIRS
+    ]
+)
 
 DATABASE_DIR = os.path.normpath(config["database_dir"])
 DATABASE_PREFIX = DATABASE_DIR + os.sep
@@ -82,6 +129,21 @@ samples = (
     .set_index("sample", drop=False)
     .sort_index()
 )
+
+if USE_INTERNAL_STANDARDS:
+    expected_internal_standard_columns = [
+        f"{standard_id}_ng" for standard_id in INTERNAL_STANDARD_IDS
+    ]
+    missing_internal_standard_columns = [
+        column
+        for column in expected_internal_standard_columns
+        if column not in samples.columns
+    ]
+    if missing_internal_standard_columns:
+        raise WorkflowError(
+            "The sample sheet is missing internal-standard amount column(s): "
+            + ", ".join(missing_internal_standard_columns)
+        )
 
 # define output as function
 def get_final_output():
