@@ -54,7 +54,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
             )
             output = root / "report.html"
             REPORT.render_report(
-                {"studyName": "test-run", "trunclens": {"truncR1": 220, "truncR2": 180}},
+                {
+                    "studyName": "test-run",
+                    "trunclens": {"truncR1": 220, "truncR2": 180},
+                    "dada2": {
+                        "prokaryotes": {"max_ee_f": 3.5},
+                        "eukaryotes": {"max_ee": 4.5},
+                    },
+                },
                 {
                     "samples": root / "samples.tsv",
                     "split_summary": root / "split.tsv",
@@ -83,6 +90,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Sequence-assignment counts", rendered)
             self.assertIn("data:image/png;base64,", rendered)
             self.assertIn("trunclens.truncR1", rendered)
+            self.assertIn("Effective DADA2 settings used", rendered)
+            self.assertIn("max_ee_f", rendered)
+            self.assertIn("Maximum expected errors in a forward read", rendered)
+            self.assertIn("<code>3.5</code>", rendered)
+            self.assertIn("<code>4.5</code>", rendered)
+            self.assertIn("min_overlap", rendered)
+            self.assertIn("n_reads_learn", rendered)
             self.assertNotIn("Median base-quality profiles", rendered)
             self.assertNotIn("Where reads were retained or lost", rendered)
 

@@ -113,6 +113,55 @@ def flatten_config(config, prefix=""):
     return rows
 
 
+def effective_dada2_parameters(config):
+    """Return every user-facing DADA2 setting, including legacy defaults."""
+    prok = {
+        "max_ee_f": 2.0,
+        "max_ee_r": 2.0,
+        "trunc_q": 2,
+        "min_overlap": 12,
+        "pooling_method": "independent",
+        "chimera_method": "consensus",
+        "min_fold_parent_over_abundance": 1.0,
+        "n_reads_learn": 1000000,
+    }
+    euk = {
+        "max_ee": 2.0,
+        "trunc_q": 0,
+        "pooling_method": "independent",
+        "chimera_method": "consensus",
+        "min_fold_parent_over_abundance": 1.0,
+        "n_reads_learn": 1000000,
+    }
+    dada2 = config.get("dada2", {}) or {}
+    if isinstance(dada2.get("prokaryotes"), dict):
+        prok.update(dada2["prokaryotes"])
+    if isinstance(dada2.get("eukaryotes"), dict):
+        euk.update(dada2["eukaryotes"])
+    trunc = config.get("trunclens", {}) or {}
+
+    return [
+        ("16S paired", "trunc_len_f", trunc.get("truncR1", "—"), "Forward bases retained"),
+        ("16S paired", "trunc_len_r", trunc.get("truncR2", "—"), "Reverse bases retained"),
+        ("16S paired", "max_ee_f", prok["max_ee_f"], "Maximum expected errors in a forward read"),
+        ("16S paired", "max_ee_r", prok["max_ee_r"], "Maximum expected errors in a reverse read"),
+        ("16S paired", "trunc_q", prok["trunc_q"], "Quality score that triggers read truncation"),
+        ("16S paired", "min_overlap", prok["min_overlap"], "Minimum overlap required to merge a read pair"),
+        ("16S paired", "pooling_method", prok["pooling_method"], "Sample pooling used during ASV inference"),
+        ("16S paired", "chimera_method", prok["chimera_method"], "Chimera-detection strategy"),
+        ("16S paired", "min_fold_parent_over_abundance", prok["min_fold_parent_over_abundance"], "Minimum parent abundance used for chimera detection"),
+        ("16S paired", "n_reads_learn", prok["n_reads_learn"], "Reads used to train the error model"),
+        ("18S concatenated", "R1_length_before_concatenation", trunc.get("truncR1", "—"), "Forward bases retained before concatenation"),
+        ("18S concatenated", "R2_length_before_concatenation", trunc.get("truncR2", "—"), "Reverse bases retained before concatenation"),
+        ("18S concatenated", "max_ee", euk["max_ee"], "Maximum expected errors in a concatenated read"),
+        ("18S concatenated", "trunc_q", euk["trunc_q"], "Quality score that triggers read truncation"),
+        ("18S concatenated", "pooling_method", euk["pooling_method"], "Sample pooling used during ASV inference"),
+        ("18S concatenated", "chimera_method", euk["chimera_method"], "Chimera-detection strategy"),
+        ("18S concatenated", "min_fold_parent_over_abundance", euk["min_fold_parent_over_abundance"], "Minimum parent abundance used for chimera detection"),
+        ("18S concatenated", "n_reads_learn", euk["n_reads_learn"], "Reads used to train the error model"),
+    ]
+
+
 def svg_composition(sample_totals, title):
     samples = list(sample_totals)
     categories = []
@@ -379,6 +428,11 @@ def render_report(config, paths, output_path):
         f"<tr><th>{esc(key)}</th><td><code>{esc(value)}</code></td></tr>"
         for key, value in flatten_config(config)
     )
+    dada2_parameter_rows = "".join(
+        f"<tr><td>{esc(path)}</td><th><code>{esc(parameter)}</code></th>"
+        f"<td><code>{esc(value)}</code></td><td>{esc(description)}</td></tr>"
+        for path, parameter, value, description in effective_dada2_parameters(config)
+    )
     top_taxa_rows = "".join(
         f"<tr><td>{index}</td><td>{esc(taxon)}</td><td>{fmt_count(value)}</td><td>{len(taxa_samples[taxon])}</td></tr>"
         for index, (taxon, value) in enumerate(taxa_totals.most_common(20), 1)
@@ -447,7 +501,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
-<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
+<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">DADA2 processing</div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Most abundant taxa</h2><p>For SILVA assignments this uses phylum where available; for PR2 it uses division or supergroup.</p>{taxa_chart}<h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></section>
