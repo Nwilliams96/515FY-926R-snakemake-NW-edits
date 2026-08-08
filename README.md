@@ -51,6 +51,16 @@ The displayed presets reproduce the pipeline's historical settings. Configs
 created before this block was introduced remain supported through matching
 workflow defaults.
 
+## USC CARC runner
+
+`run_snakemake_USC_CARC_only.sh` requests one eight-core, 128 GB CARC job and
+passes the Slurm CPU count to Snakemake. BBSplit, DADA2, and taxonomic
+classification use up to eight threads. Snakemake also receives a 120 GB
+memory budget, while the memory-heavy BBSplit and DADA2 rules declare realistic
+per-job requirements so they are not run concurrently on the same allocation.
+This USC-specific script is optional; other systems can use `run_snakemake.sh`
+or provide allocation settings appropriate for their scheduler.
+
 ## Run report
 
 The final workflow target creates a self-contained report at:

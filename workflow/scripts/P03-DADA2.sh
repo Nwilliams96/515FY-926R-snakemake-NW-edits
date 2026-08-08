@@ -17,5 +17,5 @@ qiime dada2 denoise-paired \
   --o-table ${snakemake_output[proktable]} \
   --o-representative-sequences ${snakemake_output[prokrepseqs]} \
   --o-denoising-stats ${snakemake_output[prokstats]} \
-  --p-n-threads 1 \
+  --p-n-threads ${snakemake[threads]} \
   --verbose 2>&1 | tee -a ${snakemake_log[0]}

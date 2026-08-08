@@ -8,12 +8,16 @@ rule bbsplit_prok_euk:
         euk="results/01-split/{sample}.euk.fastq",
     conda:
         "../envs/bbmap.yaml"
+    threads: 8
     resources:
-        mem_mb=4000,
+        # The shared BBSplit reference used about a 55 GB Java heap in the
+        # SR03 run. Reserving 64 GB makes Snakemake schedule only one of these
+        # memory-heavy jobs at a time in the 128 GB CARC allocation.
+        mem_mb=64000,
     log:
         "logs/01-splitting/{sample}_bbsplit.log"
     shell:
-        "bbsplit.sh usequality=f qtrim=f minratio=0.30 minid=0.30 pairedonly=f path={input.database} in={input.r1} in2={input.r2} out_SILVA_132_PROK.cdhit95pc={output.prok} out_SILVA_132_and_PR2_EUK.cdhit95pc={output.euk} 2>&1 | tee -a {log}"
+        "bbsplit.sh threads={threads} usequality=f qtrim=f minratio=0.30 minid=0.30 pairedonly=f path={input.database} in={input.r1} in2={input.r2} out_SILVA_132_PROK.cdhit95pc={output.prok} out_SILVA_132_and_PR2_EUK.cdhit95pc={output.euk} 2>&1 | tee -a {log}"
 
 rule deinterleave_split_reads_euk:
     input:
@@ -27,7 +31,7 @@ rule deinterleave_split_reads_euk:
     resources:
         mem_mb=4000,
     shell:
-        "reformat.sh in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
+        "reformat.sh threads={threads} in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
 
 rule deinterleave_split_reads_prok:
     input:
@@ -41,7 +45,7 @@ rule deinterleave_split_reads_prok:
     resources:
         mem_mb=4000,
     shell:
-        "reformat.sh in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
+        "reformat.sh threads={threads} in={input:q} out1={output.out:q} out2={output.out2:q} overwrite=t"
 
 rule count_seqs:
     input:

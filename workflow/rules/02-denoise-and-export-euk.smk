@@ -106,6 +106,9 @@ rule denoise_euk_dada2:
         euktable="results/02-euks/08-DADA2d/table.qza"
     conda:
         config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=96000,
     log:
         "logs/02-denoise-and-export-euk/08-DADA2/DADA2.stderrout"
     script:
@@ -136,6 +139,9 @@ rule classify_ASVs_euk:
         classified="results/02-euks/10-classified/" + config["studyName"] + "_SILVA.classified.qza"
     conda:
         config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
     log:
         "logs/02-denoise-and-export-euk/10-classify-ASVs.log"
     script:

@@ -11,6 +11,7 @@ qiime dada2 denoise-single \
   --p-chimera-method ${snakemake_params[chimera_method]} \
   --p-min-fold-parent-over-abundance ${snakemake_params[min_fold_parent_over_abundance]} \
   --p-n-reads-learn ${snakemake_params[n_reads_learn]} \
+  --p-n-threads ${snakemake[threads]} \
   --o-table ${snakemake_output[euktable]} \
   --o-representative-sequences ${snakemake_output[eukrepseqs]} \
   --o-denoising-stats ${snakemake_output[eukstats]} \

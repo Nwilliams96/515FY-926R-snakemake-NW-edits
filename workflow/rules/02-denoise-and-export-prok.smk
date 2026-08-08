@@ -50,6 +50,9 @@ rule denoise_prok_dada2:
         proktable="results/02-proks/03-DADA2d/table.qza"
     conda:
         config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=96000,
     log:
         "logs/02-denoise-and-export-prok/03-DADA2/DADA2.stderrout"
     script:
@@ -80,6 +83,9 @@ rule classify_ASVs:
         classified="results/02-proks/05-classified/" + config["studyName"] + "_SILVA.classified.qza"
     conda:
         config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
     log:
         "logs/02-denoise-and-export-prok/05-classify-ASVs.log"
     script:
