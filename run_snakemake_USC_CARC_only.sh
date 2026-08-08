@@ -7,11 +7,48 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --time=48:00:00
-#SBATCH --output=logs/slurm_snakemake_%j.out
-#SBATCH --error=logs/slurm_snakemake_%j.err
+#SBATCH --job-name=eASV-pipeline
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
 set -euo pipefail
+
+read_study_name() {
+  awk '
+    /^[[:space:]]*studyName[[:space:]]*:/ {
+      sub(/^[^:]*:[[:space:]]*/, "")
+      gsub(/^["'\'' ]+|["'\'' ]+$/, "")
+      print
+      exit
+    }
+  ' config/config.yml
+}
+
+STUDY_NAME="$(read_study_name)"
+if [[ -z "${STUDY_NAME}" ]]; then
+  STUDY_NAME="pipeline"
+fi
+JOB_LABEL="eASV-${STUDY_NAME}"
+JOB_LABEL="$(printf '%s' "${JOB_LABEL}" | sed 's/[^A-Za-z0-9._-]/_/g')"
+
+# Slurm reads #SBATCH directives before running this file, so it cannot obtain
+# studyName from config.yml at that stage. When launched with bash, submit this
+# same script with the detected study name. Inside the allocation, continue to
+# the workflow normally.
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+  mkdir -p logs
+  echo "Submitting CARC job ${JOB_LABEL}"
+  sbatch --job-name="${JOB_LABEL}" "$0" "$@"
+  exit $?
+fi
+
+# Also rename the queue entry if someone used `sbatch script.sh` directly.
+# In that case the log filename retains the generic name because Slurm opened
+# it before this update; using `bash script.sh` gives both named jobs and logs.
+scontrol update JobId="${SLURM_JOB_ID}" JobName="${JOB_LABEL}" || true
+
 echo "Started at: $(date) on $(hostname)"
+echo "Study: ${STUDY_NAME}; Slurm job: ${JOB_LABEL} (${SLURM_JOB_ID})"
 mkdir -p logs
 
 # Prevent libraries from taking cores outside the per-rule limits set by
@@ -29,7 +66,7 @@ conda activate snakemake
 echo "Using snakemake: $(which snakemake) ; version: $(snakemake --version || true)"
 
 # Optional target passed to the script becomes the Snakemake target.
-# Example: sbatch run_snakemake_USC_CARC_only.sh results/02-proks/sample-metadata.tsv
+# Example: bash run_snakemake_USC_CARC_only.sh results/02-proks/sample-metadata.tsv
 TARGET="${1:-}"
 PIPELINE_CORES="${SLURM_CPUS_PER_TASK:-1}"
 

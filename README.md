@@ -61,6 +61,17 @@ per-job requirements so they are not run concurrently on the same allocation.
 This USC-specific script is optional; other systems can use `run_snakemake.sh`
 or provide allocation settings appropriate for their scheduler.
 
+From the project directory, submit the CARC job with:
+
+```bash
+bash run_snakemake_USC_CARC_only.sh
+```
+
+The script reads `studyName` from `config/config.yml`, submits itself through
+Slurm, and labels the queue entry and log files as `eASV-<studyName>`. Calling
+the file with `sbatch` still works, but the log filename initially uses the
+generic `eASV-pipeline` label because Slurm opens it before the script runs.
+
 ## Run report
 
 The final workflow target creates a self-contained report at:
