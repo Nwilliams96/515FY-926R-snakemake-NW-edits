@@ -71,6 +71,9 @@ The script reads `studyName` from `config/config.yml`, submits itself through
 Slurm, and labels the queue entry and log files as `<studyName>`. Calling
 the file with `sbatch` still works, but the log filename initially uses the
 generic `pipeline` label because Slurm opens it before the script runs.
+Before starting Snakemake, the CARC runner also detects config files whose
+timestamps are ahead of the compute-node clock and resets only those timestamps.
+This prevents clock-skew failures after moving ZIP packages between computers.
 
 ## Run report
 

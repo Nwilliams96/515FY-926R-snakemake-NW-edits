@@ -21,6 +21,11 @@ class CarcEfficiencyTests(unittest.TestCase):
         self.assertIn("#SBATCH --output=logs/%x_%j.out", runner)
         self.assertIn("#SBATCH --error=logs/%x_%j.err", runner)
 
+    def test_runner_repairs_only_future_dated_config_files(self):
+        runner = (ROOT / "run_snakemake_USC_CARC_only.sh").read_text(encoding="utf-8")
+        self.assertIn('find config -type f -newer "${TIMESTAMP_MARKER}" -print0', runner)
+        self.assertIn('touch -r "${TIMESTAMP_MARKER}" "${future_config_files[@]}"', runner)
+
     def test_bbsplit_receives_threads_and_realistic_memory(self):
         rules = (ROOT / "workflow/rules/01-split-16S-18S.smk").read_text(
             encoding="utf-8"

@@ -51,6 +51,23 @@ echo "Started at: $(date) on $(hostname)"
 echo "Study: ${STUDY_NAME}; Slurm job: ${JOB_LABEL} (${SLURM_JOB_ID})"
 mkdir -p logs
 
+# ZIP files transferred from another computer can preserve timestamps that are
+# ahead of the CARC compute-node clock. Snakemake rejects outputs created before
+# those future-dated inputs. Reset only affected config files to the current
+# compute-node time; normally this block finds nothing and changes nothing.
+TIMESTAMP_MARKER="$(mktemp)"
+future_config_files=()
+while IFS= read -r -d '' config_file; do
+  future_config_files+=("${config_file}")
+done < <(find config -type f -newer "${TIMESTAMP_MARKER}" -print0)
+
+if (( ${#future_config_files[@]} > 0 )); then
+  echo "Correcting future timestamps on ${#future_config_files[@]} config file(s):"
+  printf '  %s\n' "${future_config_files[@]}"
+  touch -r "${TIMESTAMP_MARKER}" "${future_config_files[@]}"
+fi
+rm -f "${TIMESTAMP_MARKER}"
+
 # Prevent libraries from taking cores outside the per-rule limits set by
 # Snakemake. Multithreaded tools receive their thread counts explicitly.
 export OPENBLAS_NUM_THREADS=1
