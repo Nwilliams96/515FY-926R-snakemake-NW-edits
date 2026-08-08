@@ -16,7 +16,7 @@ class CarcEfficiencyTests(unittest.TestCase):
     def test_runner_labels_jobs_from_study_name(self):
         runner = (ROOT / "run_snakemake_USC_CARC_only.sh").read_text(encoding="utf-8")
         self.assertIn("read_study_name()", runner)
-        self.assertIn('JOB_LABEL="eASV-${STUDY_NAME}"', runner)
+        self.assertIn('JOB_LABEL="${STUDY_NAME}"', runner)
         self.assertIn('sbatch --job-name="${JOB_LABEL}" "$0" "$@"', runner)
         self.assertIn("#SBATCH --output=logs/%x_%j.out", runner)
         self.assertIn("#SBATCH --error=logs/%x_%j.err", runner)

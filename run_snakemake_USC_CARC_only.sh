@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --time=48:00:00
-#SBATCH --job-name=eASV-pipeline
+#SBATCH --job-name=pipeline
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
@@ -28,7 +28,7 @@ STUDY_NAME="$(read_study_name)"
 if [[ -z "${STUDY_NAME}" ]]; then
   STUDY_NAME="pipeline"
 fi
-JOB_LABEL="eASV-${STUDY_NAME}"
+JOB_LABEL="${STUDY_NAME}"
 JOB_LABEL="$(printf '%s' "${JOB_LABEL}" | sed 's/[^A-Za-z0-9._-]/_/g')"
 
 # Slurm reads #SBATCH directives before running this file, so it cannot obtain

@@ -68,9 +68,9 @@ bash run_snakemake_USC_CARC_only.sh
 ```
 
 The script reads `studyName` from `config/config.yml`, submits itself through
-Slurm, and labels the queue entry and log files as `eASV-<studyName>`. Calling
+Slurm, and labels the queue entry and log files as `<studyName>`. Calling
 the file with `sbatch` still works, but the log filename initially uses the
-generic `eASV-pipeline` label because Slurm opens it before the script runs.
+generic `pipeline` label because Slurm opens it before the script runs.
 
 ## Run report
 
