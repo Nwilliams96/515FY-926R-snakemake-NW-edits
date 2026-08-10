@@ -65,9 +65,10 @@ if USE_INTERNAL_STANDARDS:
             isd_added="config/samples.tsv"
         params:
             standard_ids=INTERNAL_STANDARD_IDS,
-            standard_slots=INTERNAL_STANDARD_SLOTS
+            standard_slots=INTERNAL_STANDARD_SLOTS,
+            method_stems=INTERNAL_STANDARD_METHOD_STEMS
         output:
-            corrected="results/05-internal-std-corrected/" + config["studyName"] + ".ISD_corrected_asv_table.tsv",
+            corrected=ISD_CORRECTED_LONG_TABLE,
             method_tables=INTERNAL_STANDARD_METHOD_TABLES,
             recovery_plot="results/06-figures/" + config["studyName"] + ".recovery_ratios.pdf",
             domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf",

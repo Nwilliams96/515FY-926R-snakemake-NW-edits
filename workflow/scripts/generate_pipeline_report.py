@@ -230,6 +230,22 @@ def parse_dada2_stats(path):
     return result
 
 
+def parse_cutadapt_qc(paths):
+    """Read raw pair counts from the per-sample Cutadapt summary files."""
+    result = {}
+    count_pattern = re.compile(
+        r"^\s*Total (?:read pairs|reads) processed:\s*([0-9,]+)", re.MULTILINE
+    )
+    for path in paths:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        match = count_pattern.search(text)
+        if not match:
+            continue
+        sample = re.sub(r"\.qc\.txt$", "", Path(path).name)
+        result[normalize_sample_id(sample)] = float(match.group(1).replace(",", ""))
+    return result
+
+
 def aggregate_dada2_stats(stats):
     result = {}
     for stage in ("input", "filtered", "denoised", "merged", "final"):
@@ -241,6 +257,45 @@ def aggregate_dada2_stats(stats):
         else None
     )
     return result
+
+
+def svg_sample_read_counts(counts, sample_order, label):
+    data = [(sample, counts[sample]) for sample in sample_order if sample in counts]
+    if not data:
+        return '<p class="small-muted">Read counts were not available.</p>'
+    width = max(760, 110 + len(data) * 54)
+    height = 420
+    left, right, top, bottom = 70, 25, 35, 100
+    plot_w = width - left - right
+    plot_h = height - top - bottom
+    max_value = max(value for _, value in data) or 1
+    bar_w = min(34, plot_w / max(1, len(data)) * 0.65)
+    pieces = [
+        f'<div class="chart-scroll"><svg viewBox="0 0 {width} {height}" '
+        f'style="min-width:{width}px" role="img" aria-label="{esc(label)}">'
+    ]
+    for fraction in (0, 0.25, 0.5, 0.75, 1):
+        y = top + plot_h * (1 - fraction)
+        pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>')
+        pieces.append(
+            f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" class="svg-label">'
+            f'{fmt_count(max_value * fraction)}</text>'
+        )
+    slot_w = plot_w / len(data)
+    for index, (sample, value) in enumerate(data):
+        x = left + slot_w * (index + 0.5) - bar_w / 2
+        bar_h = plot_h * value / max_value
+        y = top + plot_h - bar_h
+        pieces.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
+            f'rx="3" fill="#2563eb"><title>{esc(sample)}: {fmt_count(value)}</title></rect>'
+        )
+        pieces.append(
+            f'<text transform="translate({x + bar_w / 2:.1f},{height-bottom+12}) rotate(55)" '
+            f'class="svg-label">{esc(sample)}</text>'
+        )
+    pieces.append("</svg></div>")
+    return "".join(pieces)
 
 
 def flatten_config(config, prefix=""):
@@ -561,6 +616,7 @@ def render_report(config, paths, output_path):
 
     stats16 = parse_dada2_stats(paths["stats16s"])
     stats18 = parse_dada2_stats(paths["stats18s"])
+    raw_read_pairs = parse_cutadapt_qc(paths.get("cutadapt_qc", []))
     aggregate16 = aggregate_dada2_stats(stats16)
     aggregate18 = aggregate_dada2_stats(stats18)
 
@@ -597,6 +653,23 @@ def render_report(config, paths, output_path):
     ordered_samples = [sample for sample in sample_names if sample in set(split) | set(stats16) | set(stats18)]
     for sample in sorted((set(split) | set(stats16) | set(stats18)) - set(ordered_samples)):
         ordered_samples.append(sample)
+
+    all_chart_samples = list(sample_names)
+    for sample in ordered_samples:
+        if sample not in all_chart_samples:
+            all_chart_samples.append(sample)
+    post_dada2_reads = {
+        sample: (stats16.get(sample, {}).get("final") or 0)
+        + (stats18.get(sample, {}).get("final") or 0)
+        for sample in all_chart_samples
+        if sample in stats16 or sample in stats18
+    }
+    raw_reads_chart = svg_sample_read_counts(
+        raw_read_pairs, all_chart_samples, "Raw read pairs per sample before filtering and QC"
+    )
+    post_dada2_chart = svg_sample_read_counts(
+        post_dada2_reads, all_chart_samples, "Non-chimeric reads per sample after DADA2"
+    )
 
     split_total = sum(item["total"] for item in split.values())
     final16 = sum(item["final"] for item in stats16.values())
@@ -708,7 +781,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
-<section id="quality"><div class="eyebrow">DADA2 processing</div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
+<section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy explorer</h2><p>Use a populated field from <code>samples.tsv</code> to examine a sample group, then choose any taxonomy level available in the formatted results. Counts use <code>{esc(abundance_column)}</code>. The chart shows the 12 most abundant taxa and the table shows the top 20.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-metadata-field">Sample metadata field</label><select id="taxonomy-metadata-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Metadata value</label><select id="taxonomy-metadata-value"></select></div><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Filtered taxonomic abundance chart"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive filters require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
 {internal_section}
@@ -724,6 +797,7 @@ def run_from_snakemake(snakemake_object):
         "split_summary": str(snakemake_object.input.split_summary),
         "stats16s": str(snakemake_object.input.stats16s),
         "stats18s": str(snakemake_object.input.stats18s),
+        "cutadapt_qc": list(snakemake_object.input.cutadapt_qc),
         "long_data": str(snakemake_object.input.long_data),
         "internal_standard_figures": list(
             getattr(snakemake_object.input, "internal_standard_figures", []) or []

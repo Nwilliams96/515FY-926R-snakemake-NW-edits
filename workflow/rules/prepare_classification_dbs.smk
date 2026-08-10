@@ -2,6 +2,8 @@
 #make variables for everything that can have variables - db version, primer sequence, etc
 
 rule download_SILVA:
+    input:
+        rules.initialize_database_directories.output.marker
     output:
         seqs=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-rna-seqs.qza"),
         taxonomy=temp(DATABASE_PREFIX + "classification/SILVA/silva-ssu-nr99-tax.qza")
@@ -12,8 +14,11 @@ rule download_SILVA:
     priority: 50
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/01-rescript-dl-database-file.sh"
+    shell:
+        "qiime rescript get-silva-data --p-version {params.SILVAversion:q} "
+        "--p-target SSURef_NR99 --p-include-species-labels "
+        "--o-silva-sequences {output.seqs:q} --o-silva-taxonomy {output.taxonomy:q} "
+        "2> {log:q}"
 
 rule reverse_transcribe:
     input:
@@ -25,8 +30,9 @@ rule reverse_transcribe:
     priority: 49
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/02-reverse-transcribe.sh"
+    shell:
+        "qiime rescript reverse-transcribe --i-rna-sequences {input:q} "
+        "--o-dna-sequences {output:q} 2> {log:q}"
 
 rule qc_seqs_cull:
     input:
@@ -38,8 +44,9 @@ rule qc_seqs_cull:
     priority: 48
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/03-qc-seqs-cull.sh"
+    shell:
+        "qiime rescript cull-seqs --i-sequences {input.rawDNA:q} "
+        "--o-clean-sequences {output.cleanDNA:q} 2> {log:q}"
 
 rule qc_seqs_filter:
     input:
@@ -53,8 +60,12 @@ rule qc_seqs_filter:
     priority: 47
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/04-qc-seqs-length-filter.sh"
+    shell:
+        "qiime rescript filter-seqs-length-by-taxon "
+        "--i-sequences {input.cleanDNA:q} --i-taxonomy {input.taxonomy:q} "
+        "--p-labels Archaea Bacteria Eukaryota --p-min-lens 900 1200 1400 "
+        "--o-filtered-seqs {output.filteredDNA:q} "
+        "--o-discarded-seqs {output.discardedDNA:q} 2> {log:q}"
 
 rule qc_seqs_dereplicate:
     input:
@@ -68,8 +79,11 @@ rule qc_seqs_dereplicate:
     priority: 46
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/05-qc-seqs-dereplicate.sh"
+    shell:
+        "qiime rescript dereplicate --i-sequences {input.filteredDNA:q} "
+        "--i-taxa {input.taxonomy:q} --p-mode uniq "
+        "--o-dereplicated-sequences {output.dereplicatedDNA:q} "
+        "--o-dereplicated-taxa {output.dereplicatedTaxa:q} 2> {log:q}"
 
 rule extract_primers:
     input:
@@ -84,8 +98,13 @@ rule extract_primers:
     priority: 45
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/06-extract-primers.sh"
+    threads: 8
+    shell:
+        "qiime feature-classifier extract-reads "
+        "--i-sequences {input.dereplicatedDNA:q} "
+        "--p-f-primer {params.fwdPrimer:q} --p-r-primer {params.revPrimer:q} "
+        "--p-n-jobs {threads} --p-read-orientation forward "
+        "--o-reads {output.slicedDNA:q} 2> {log:q}"
 
 rule dereplicated_sliced_data:
     input:
@@ -99,8 +118,11 @@ rule dereplicated_sliced_data:
     priority: 44
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/07-deduplicate-sliced-data.sh"
+    shell:
+        "qiime rescript dereplicate --i-sequences {input.slicedDNA:q} "
+        "--i-taxa {input.dereplicatedTaxa:q} --p-mode uniq "
+        "--o-dereplicated-sequences {output.slicedDNAdereplicated:q} "
+        "--o-dereplicated-taxa {output.dereplicatedTaxaSliced:q} 2> {log:q}"
 
 rule train_classifier:
     input:
@@ -113,8 +135,15 @@ rule train_classifier:
     priority: 43
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/SILVA/08-train-classifier.sh"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=360,
+    shell:
+        "qiime feature-classifier fit-classifier-naive-bayes "
+        "--i-reference-reads {input.slicedDNAdereplicated:q} "
+        "--i-reference-taxonomy {input.dereplicatedTaxaSliced:q} "
+        "--o-classifier {output:q} 2> {log:q}"
 
 rule clean_pr2_fasta_extract_headers:
     input:
@@ -124,7 +153,7 @@ rule clean_pr2_fasta_extract_headers:
         headers=DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.headers.txt"
     priority: 50
     script:
-        "../scripts/tax-classifier-construction/PR2/script_to_reformat_PR.sh"
+        "../scripts/reformat_pr2_reference.py"
 
 rule import_pr2_fasta:
     input:
@@ -134,8 +163,9 @@ rule import_pr2_fasta:
     priority: 49
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/00-import-fasta.sh"
+    shell:
+        "qiime tools import --type 'FeatureData[Sequence]' "
+        "--input-path {input:q} --output-path {output:q}"
 
 rule import_pr2_taxonomy:
     input:
@@ -145,8 +175,10 @@ rule import_pr2_taxonomy:
     priority: 49
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/01-import-headers.sh"
+    shell:
+        "qiime tools import --type 'FeatureData[Taxonomy]' "
+        "--input-format HeaderlessTSVTaxonomyFormat "
+        "--input-path {input:q} --output-path {output:q}"
 
 rule cull_pr2_seqs:
     input:
@@ -156,8 +188,9 @@ rule cull_pr2_seqs:
     priority: 48
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/02-qc-seqs-cull.sh"
+    shell:
+        "qiime rescript cull-seqs --i-sequences {input:q} "
+        "--o-clean-sequences {output:q}"
 
 rule derep_seqs_taxonomy:
     input:
@@ -169,8 +202,11 @@ rule derep_seqs_taxonomy:
     priority: 47
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/03-qc-seqs-dereplicate.sh"
+    shell:
+        "qiime rescript dereplicate --i-sequences {input.culled:q} "
+        "--i-taxa {input.taxonomy:q} --p-mode uniq --p-rank-handles disable "
+        "--o-dereplicated-sequences {output.derepseqs:q} "
+        "--o-dereplicated-taxa {output.dereptaxa:q}"
 
 rule extract_primers_pr2:
     input:
@@ -185,8 +221,12 @@ rule extract_primers_pr2:
     priority: 45
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/04-extract-primers.sh"
+    threads: 8
+    shell:
+        "qiime feature-classifier extract-reads --i-sequences {input:q} "
+        "--p-f-primer {params.fwdPrimer:q} --p-r-primer {params.revPrimer:q} "
+        "--p-n-jobs {threads} --p-read-orientation forward "
+        "--o-reads {output.slicedDNA:q} 2> {log:q}"
 
 rule dereplicate_extracted_pr2_reads:
     input:
@@ -200,8 +240,11 @@ rule dereplicate_extracted_pr2_reads:
     priority: 44
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/05-deduplicate-sliced-data.sh"
+    shell:
+        "qiime rescript dereplicate --i-sequences {input.slicedDNA:q} "
+        "--i-taxa {input.dereplicatedTaxa:q} --p-mode uniq "
+        "--o-dereplicated-sequences {output.slicedDNAdereplicated:q} "
+        "--o-dereplicated-taxa {output.dereplicatedTaxaSliced:q} 2> {log:q}"
 
 rule train_classifier_pr2:
     input:
@@ -214,6 +257,13 @@ rule train_classifier_pr2:
     priority: 43
     conda:
         config["qiime2version"]
-    script:
-        "../scripts/tax-classifier-construction/PR2/06-train-classifier.sh"
+    threads: 1
+    resources:
+        mem_mb=32000,
+        runtime=360,
+    shell:
+        "qiime feature-classifier fit-classifier-naive-bayes "
+        "--i-reference-reads {input.slicedDNAdereplicated:q} "
+        "--i-reference-taxonomy {input.dereplicatedTaxaSliced:q} "
+        "--o-classifier {output:q} 2> {log:q}"
  

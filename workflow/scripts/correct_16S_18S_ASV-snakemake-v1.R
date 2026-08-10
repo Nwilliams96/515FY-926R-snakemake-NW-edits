@@ -12,7 +12,7 @@ library(data.table)
 raw16s_files     <- snakemake@input[["raw16S"]]
 raw18s_files     <- snakemake@input[["raw18S"]]
 readsum_files    <- snakemake@input[["read_summary"]]
-bioanalyzer_path <- snakemake@input[["bioanalyzer"]]
+amplicon_concentrations_path <- snakemake@input[["amplicon_concentrations"]]
 stats16s_files   <- snakemake@input[["stats16S"]]
 stats18s_files   <- snakemake@input[["stats18S"]]
 
@@ -39,10 +39,10 @@ raw_18S <- purrr::map_dfr(raw18s_files, ~
 # Import read_summary
 read_summary <- readr::read_tsv(readsum_files, show_col_types = FALSE) %>% as.data.table()
 
-# Import bioanalyzer. Force sample_type to character because readr otherwise
+# Import amplicon concentrations. Force sample_type to character because readr otherwise
 # parses values such as "16S" and "18S" as the numbers 16 and 18.
-bioanalyzer_results <- readr::read_tsv(
-  bioanalyzer_path,
+amplicon_concentrations <- readr::read_tsv(
+  amplicon_concentrations_path,
   col_types = readr::cols(
     sample_type = readr::col_character(),
     amount_pM = readr::col_double()
@@ -50,18 +50,18 @@ bioanalyzer_results <- readr::read_tsv(
   show_col_types = FALSE
 ) %>% as.data.table()
 
-required_bioanalyzer_columns <- c("sample_type", "amount_pM")
-missing_bioanalyzer_columns <- setdiff(required_bioanalyzer_columns, names(bioanalyzer_results))
-if (length(missing_bioanalyzer_columns) > 0) {
+required_concentration_columns <- c("sample_type", "amount_pM")
+missing_concentration_columns <- setdiff(required_concentration_columns, names(amplicon_concentrations))
+if (length(missing_concentration_columns) > 0) {
   stop(
-    "config/bioanalyzer.tsv is missing required column(s): ",
-    paste(missing_bioanalyzer_columns, collapse = ", "),
+    "config/prok_and_euk_SSU_amplicon_concentrations.tsv is missing required column(s): ",
+    paste(missing_concentration_columns, collapse = ", "),
     ". Expected columns: sample_type and amount_pM."
   )
 }
 
-bioanalyzer_results[, sample_type := toupper(trimws(as.character(sample_type)))]
-bioanalyzer_results[, amount_pM := as.numeric(amount_pM)]
+amplicon_concentrations[, sample_type := toupper(trimws(as.character(sample_type)))]
+amplicon_concentrations[, amount_pM := as.numeric(amount_pM)]
 
 # Import Stats
 statistics_18S <- purrr::map_dfr(stats18s_files, ~ readr::read_delim(.x, delim = "\t", show_col_types = FALSE)) %>% slice(-1)
@@ -80,8 +80,8 @@ PROK_frac <- PROK_reads / (PROK_reads + EUK_reads)
 EUK_frac <- EUK_reads / (PROK_reads + EUK_reads)
 
 #Turn concentrations into objects
-Concentration_16S <- bioanalyzer_results[sample_type == "16S", amount_pM]
-Concentration_18S <- bioanalyzer_results[sample_type == "18S", amount_pM]
+Concentration_16S <- amplicon_concentrations[sample_type == "16S", amount_pM]
+Concentration_18S <- amplicon_concentrations[sample_type == "18S", amount_pM]
 
 if (
   length(Concentration_16S) != 1 ||
@@ -91,22 +91,22 @@ if (
   (Concentration_16S + Concentration_18S) <= 0
 ) {
   stop(
-    "config/bioanalyzer.tsv must contain exactly one 16S row and one 18S row, ",
+    "config/prok_and_euk_SSU_amplicon_concentrations.tsv must contain exactly one 16S row and one 18S row, ",
     "with non-negative numeric amount_pM values whose sum is greater than zero."
   )
 }
 
 #Calculate 16S ratio
-bioanalyzer_frac_16S <- Concentration_16S / (Concentration_16S + Concentration_18S)
+starting_frac_16S <- Concentration_16S / (Concentration_16S + Concentration_18S)
 
 #Calculate 18S ratio
-bioanalyzer_frac_18S <- Concentration_18S / (Concentration_16S + Concentration_18S)
+starting_frac_18S <- Concentration_18S / (Concentration_16S + Concentration_18S)
 
 #Set the correction factors for each file
 #Correction factor for 18S and 16S, as determined empirically - please see notes for calculation instructions.
 #Change this to reflect your dataset! Placeholder value of 2 from the mock communities
-correction_factor_16S = bioanalyzer_frac_16S / PROK_frac
-correction_factor_18S = bioanalyzer_frac_18S / EUK_frac
+correction_factor_16S = starting_frac_16S / PROK_frac
+correction_factor_18S = starting_frac_18S / EUK_frac
 
 #Import .16S.all-16S-seqs.with-tax.tsv
 

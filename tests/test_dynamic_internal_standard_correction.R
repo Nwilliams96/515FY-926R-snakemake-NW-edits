@@ -64,6 +64,22 @@ run_case <- function(number_of_standards) {
   pair_count <- choose(number_of_standards, 2)
   method_count <- number_of_standards + 2 + pair_count
   method_outputs <- file.path(root, paste0("method-", seq_len(method_count), ".tsv"))
+  id_pairs <- if (number_of_standards >= 2) {
+    combn(standard_ids, 2, simplify = FALSE)
+  } else {
+    list()
+  }
+  all_ids_stem <- paste(standard_ids, collapse = "_")
+  method_stems <- c(
+    paste0(standard_ids, "_recovery_ratio"),
+    paste0("mean_", all_ids_stem, "_recovery_ratio"),
+    paste0("median_", all_ids_stem, "_recovery_ratio"),
+    vapply(
+      id_pairs,
+      function(pair) paste0("mean_", pair[[1]], "_and_", pair[[2]], "_recovery_ratio"),
+      character(1)
+    )
+  )
 
   snakemake <<- new(
     "MockSnakemake",
@@ -83,7 +99,8 @@ run_case <- function(number_of_standards) {
     ),
     params = list(
       standard_ids = standard_ids,
-      standard_slots = standard_slots
+      standard_slots = standard_slots,
+      method_stems = method_stems
     ),
     config = list(studyName = "TEST")
   )
@@ -98,7 +115,10 @@ run_case <- function(number_of_standards) {
   corrected <- read_tsv(snakemake@output[["corrected"]], show_col_types = FALSE)
   stopifnot(!"internal-hash-1" %in% corrected$ASV_hash)
   stopifnot("biological-hash" %in% corrected$ASV_hash)
-  stopifnot(paste0("Copies_isd_", number_of_standards, "_recovery_ratio") %in% names(corrected))
+  stopifnot(paste0("Copies_Standard-", number_of_standards, "_recovery_ratio") %in% names(corrected))
+  if (number_of_standards >= 2) {
+    stopifnot(any(grepl("_and_", names(corrected), fixed = TRUE)))
+  }
 }
 
 run_case(1)

@@ -5,7 +5,7 @@ rule merge_prok_euk:
         stats16S="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_stats.tsv",
         stats18S="results/02-euks/09-DADA2d-plaintext-exports/" + config["studyName"] + ".18S.latest_stats.tsv",
         read_summary="results/" + config["studyName"] + ".eukfrac-all.tsv",
-        bioanalyzer="config/bioanalyzer.tsv",
+        amplicon_concentrations=AMPLICON_CONCENTRATIONS_FILE,
         proportalclassification="results/02-proks/10-exports/" + config["studyName"] + ".Synechococcales.proportal-classified.tsv"
     output:
         mergedtableuncorrected="results/03-merged/" + config["studyName"] + ".merged_uncorrected.tsv",

@@ -37,6 +37,22 @@ Each ID requires a matching `<ID>_ng` column in `config/samples.tsv` and a
 matching row in `config/internal_stds.tsv`. Older configs that use the
 `intstd1`/`intstd2`/`intstd3` mapping remain supported.
 
+Internal-standard method tables use the configured IDs in their filenames. For
+example, standards named `BP` and `DR` produce `asv_table_BP_recovery_ratio.tsv`
+and `asv_table_mean_BP_and_DR_recovery_ratio.tsv`, so the correction represented
+by every single-standard and combination output is explicit. The combined long
+table similarly includes all configured IDs, for example
+`<study>.BP_DR.ISD_corrected_long_data.tsv`.
+
+The required starting-pool concentration file is named
+`config/prok_and_euk_SSU_amplicon_concentrations.tsv`. Updated workflows still
+accept an existing `config/bioanalyzer.tsv` when the new file is absent, allowing
+older study folders to finish after a pipeline update.
+
+Additional user-defined columns may be added to `config/samples.tsv`. They are
+preserved in the generated QIIME metadata and are available as filters in the
+HTML report; they do not alter read processing.
+
 The cloned repository intentionally does not include a `config/` folder. Create
 and download the study-specific setup package from the pipeline tutorial, then
 place its complete `config/` folder in the repository before running Snakemake.
@@ -75,6 +91,12 @@ Before starting Snakemake, the CARC runner also detects config files whose
 timestamps are ahead of the compute-node clock and resets only those timestamps.
 This prevents clock-skew failures after moving ZIP packages between computers.
 
+When databases must be built, SILVA and PR2 preparation can run concurrently.
+BBSplit indexing and both primer-extraction steps use up to eight cores. QIIME's
+naive-Bayes classifier-training action does not expose a worker-count option, so
+each classifier-training command remains single-core while the independent
+SILVA and PR2 branches may still run in parallel.
+
 ## Run report
 
 The final workflow target creates a self-contained report at:
@@ -83,7 +105,8 @@ The final workflow target creates a self-contained report at:
 results/07-report/<studyName>.pipeline-report.html
 ```
 
-The report summarizes the configuration, read retention, sample-level quality
+The report summarizes the configuration, raw read pairs per sample, reads
+retained per sample after DADA2, stage-specific read loss, sample-level quality
 control, domain composition, 16S/18S/chloroplast/mitochondrial assignments,
 unassigned sequences, abundant taxa, and—when enabled—the
 internal-standard results and figures.

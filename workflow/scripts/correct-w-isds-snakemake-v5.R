@@ -17,6 +17,9 @@ standard_asv_paths <- as.character(unlist(
 method_table_outputs <- as.character(unlist(
   snakemake@output[["method_tables"]], use.names = FALSE
 ))
+method_stems <- as.character(unlist(
+  snakemake@params[["method_stems"]], use.names = FALSE
+))
 
 if (length(standard_ids) < 1) {
   stop("At least one internal standard is required for correction")
@@ -222,6 +225,7 @@ method_specs <- bind_rows(
     label = pair_labels
   )
 ) %>%
+  mutate(stem = method_stems) %>%
   mutate(copy_column = paste0("Copies_", stem))
 
 if (length(method_table_outputs) != nrow(method_specs)) {

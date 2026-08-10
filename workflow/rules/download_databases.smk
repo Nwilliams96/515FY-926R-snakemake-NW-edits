@@ -2,7 +2,21 @@
 #NAMES = ["and_PR2_EUK", "PROK"]
 #database_dir=config["database_dir"]
 
+rule initialize_database_directories:
+    output:
+        marker=DATABASE_PREFIX + ".database_directories.ready"
+    params:
+        bbsplit=DATABASE_PREFIX + "bbsplit-db",
+        silva=DATABASE_PREFIX + "classification/SILVA",
+        pr2=DATABASE_PREFIX + "classification/PR2"
+    priority: 51
+    shell:
+        "mkdir -p {params.bbsplit:q} {params.silva:q} {params.pr2:q} "
+        "&& touch {output.marker:q}"
+
 rule download_prok_db:
+    input:
+        rules.initialize_database_directories.output.marker
     output:
         temp(DATABASE_PREFIX + "bbsplit-db/SILVA_132_PROK.cdhit95pc.fasta"),
     log:
@@ -19,6 +33,8 @@ rule download_prok_db:
         "v7.2.0/utils/aria2c"
 
 rule download_euk_db:
+    input:
+        rules.initialize_database_directories.output.marker
     output:
         temp(DATABASE_PREFIX + "bbsplit-db/SILVA_132_and_PR2_EUK.cdhit95pc.fasta"),
     log:
@@ -35,6 +51,8 @@ rule download_euk_db:
         "v7.2.0/utils/aria2c"
 
 rule download_pr2:
+    input:
+        rules.initialize_database_directories.output.marker
     output:
         temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz")
     log:

@@ -76,14 +76,36 @@ if USE_INTERNAL_STANDARDS:
 INTERNAL_STANDARD_SLOTS = [
     f"isd_{index}" for index in range(1, len(INTERNAL_STANDARD_IDS) + 1)
 ]
-INTERNAL_STANDARD_PAIRS = list(combinations(INTERNAL_STANDARD_SLOTS, 2))
+INTERNAL_STANDARD_ID_PAIRS = list(combinations(INTERNAL_STANDARD_IDS, 2))
+ALL_INTERNAL_STANDARD_IDS_STEM = "_".join(INTERNAL_STANDARD_IDS)
+ISD_CORRECTED_LONG_TABLE = (
+    "results/05-internal-std-corrected/"
+    + config["studyName"]
+    + "."
+    + ALL_INTERNAL_STANDARD_IDS_STEM
+    + ".ISD_corrected_long_data.tsv"
+)
 INTERNAL_STANDARD_METHOD_STEMS = (
-    [f"{slot}_recovery_ratio" for slot in INTERNAL_STANDARD_SLOTS]
-    + ["mean_recovery_ratio", "median_recovery_ratio"]
+    [f"{standard_id}_recovery_ratio" for standard_id in INTERNAL_STANDARD_IDS]
     + [
-        f"{first}_{second}_mean_recovery_ratio"
-        for first, second in INTERNAL_STANDARD_PAIRS
+        f"mean_{ALL_INTERNAL_STANDARD_IDS_STEM}_recovery_ratio",
+        f"median_{ALL_INTERNAL_STANDARD_IDS_STEM}_recovery_ratio",
     ]
+    + [
+        f"mean_{first}_and_{second}_recovery_ratio"
+        for first, second in INTERNAL_STANDARD_ID_PAIRS
+    ]
+)
+
+NEW_AMPLICON_CONCENTRATIONS_FILE = (
+    "config/prok_and_euk_SSU_amplicon_concentrations.tsv"
+)
+LEGACY_AMPLICON_CONCENTRATIONS_FILE = "config/bioanalyzer.tsv"
+AMPLICON_CONCENTRATIONS_FILE = (
+    LEGACY_AMPLICON_CONCENTRATIONS_FILE
+    if os.path.exists(LEGACY_AMPLICON_CONCENTRATIONS_FILE)
+    and not os.path.exists(NEW_AMPLICON_CONCENTRATIONS_FILE)
+    else NEW_AMPLICON_CONCENTRATIONS_FILE
 )
 
 DATABASE_DIR = os.path.normpath(config["database_dir"])
@@ -141,15 +163,13 @@ RESULTS_EXPORT_OUTPUTS = [
     "Results-Export/" + config["studyName"] + ".pipeline-report.html",
 ]
 if USE_INTERNAL_STANDARDS:
-    RESULTS_EXPORT_INPUTS.append(
-        "results/05-internal-std-corrected/"
-        + config["studyName"]
-        + ".ISD_corrected_asv_table.tsv"
-    )
+    RESULTS_EXPORT_INPUTS.append(ISD_CORRECTED_LONG_TABLE)
     RESULTS_EXPORT_OUTPUTS.append(
         "Results-Export/"
         + config["studyName"]
-        + ".ISD_corrected_asv_table.tsv"
+        + "."
+        + ALL_INTERNAL_STANDARD_IDS_STEM
+        + ".ISD_corrected_long_data.tsv"
     )
 
 # read sample sheet
@@ -217,11 +237,7 @@ def get_final_output():
         "results/07-report/" + config["studyName"] + ".pipeline-report.html"
     )
     if USE_INTERNAL_STANDARDS:
-        final_output.append(
-            "results/05-internal-std-corrected/"
-            + config["studyName"]
-            + ".ISD_corrected_asv_table.tsv"
-        )
+        final_output.append(ISD_CORRECTED_LONG_TABLE)
 
     final_output.extend(RESULTS_EXPORT_OUTPUTS)
     final_output.append("Results-Export/README.txt")

@@ -7,6 +7,11 @@ rule prepare_bbsplit_db:
         "../envs/bbmap.yaml"
     log:
         "logs/bbsplit_db_prep.log"
+    threads: 8
+    resources:
+        mem_mb=64000,
+        runtime=240,
     priority: 50
     shell:
-        "bbsplit.sh build=1 ref={input.file1},{input.file2} path={output}"
+        "bbsplit.sh build=1 threads={threads} ref={input.file1:q},{input.file2:q} "
+        "path={output:q} 2> {log:q}"

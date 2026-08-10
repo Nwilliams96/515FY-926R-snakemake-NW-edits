@@ -12,6 +12,9 @@ rule generate_pipeline_report:
         split_summary="results/" + config["studyName"] + ".eukfrac-per-sample.tsv",
         stats16s="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_stats.tsv",
         stats18s="results/02-euks/09-DADA2d-plaintext-exports/" + config["studyName"] + ".18S.latest_stats.tsv",
+        cutadapt_qc=expand(
+            "results/00-trimmed/{sample}.qc.txt", sample=samples["sample"]
+        ),
         long_data="results/04-formatted/" + config["studyName"] + ".long_data.tsv",
         internal_standard_figures=INTERNAL_STANDARD_REPORT_FIGURES
     output:

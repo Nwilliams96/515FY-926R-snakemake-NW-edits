@@ -36,6 +36,10 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 stats.format(input=300, filtered=250, denoised=220, merged="", final=200),
                 encoding="utf-8",
             )
+            (root / "S_1.qc.txt").write_text(
+                "Total read pairs processed:              1,250\n",
+                encoding="utf-8",
+            )
             (root / "long.tsv").write_text(
                 "SampleID\tDomain\tPhylum\tDivision\tClass\tSequence_Type\t"
                 "plastid_16S_rRNA\tASV_hash\tCorrected_Sequence_Counts\n"
@@ -67,6 +71,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "split_summary": root / "split.tsv",
                     "stats16s": root / "16.tsv",
                     "stats18s": root / "18.tsv",
+                    "cutadapt_qc": [root / "S_1.qc.txt"],
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
                 },
@@ -79,6 +84,10 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Denoising loss", rendered)
             self.assertIn("Pair-merging loss", rendered)
             self.assertIn("Chimera-removal loss", rendered)
+            self.assertIn("Reads before filtering and quality control", rendered)
+            self.assertIn("S-1: 1,250", rendered)
+            self.assertIn("Reads retained after DADA2", rendered)
+            self.assertIn("S-1: 800", rendered)
             self.assertIn("Not applicable", rendered)
             self.assertIn("Proteobacteria", rendered)
             self.assertIn("Interactive taxonomy explorer", rendered)
