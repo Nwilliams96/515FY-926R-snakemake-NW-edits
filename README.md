@@ -19,9 +19,22 @@ conda activate snakemake
 snakemake --version
 ```
 
-Run this workflow with `--use-conda`. On the first run, Snakemake downloads and
-creates the rule-specific QIIME 2, R, BLAST, BBMap, and utility environments.
-Subsequent runs reuse them.
+Run this workflow with `--use-conda`. The included launch scripts also pass a
+shared `--conda-prefix`, taken from `conda_envs_dir` in `config/config.yml`.
+Snakemake identifies rule environments from their environment definitions: it
+reuses matching completed environments and creates only those that are missing
+or whose definitions have changed. Keep this directory outside each analysis
+clone so new projects can share the same QIIME 2, R, BLAST, BBMap, and utility
+environments. For example:
+
+```yaml
+conda_envs_dir: "../eASV-conda-envs"
+```
+
+Set `SNAKEMAKE_CONDA_PREFIX` before running if a computer or HPC needs to
+override that configured location. Older projects without `conda_envs_dir`
+reuse their existing `.snakemake/conda` directory when present; otherwise the
+scripts default to `../eASV-conda-envs`.
 
 When internal-standard correction is enabled, `intstds` is an ordered list and
 may contain one or more unique standard IDs:

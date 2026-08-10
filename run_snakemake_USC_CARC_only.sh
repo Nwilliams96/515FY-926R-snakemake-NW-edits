@@ -24,6 +24,18 @@ read_study_name() {
   ' config/config.yml
 }
 
+read_config_value() {
+  local key="$1"
+  awk -v key="${key}" '
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*:" {
+      sub(/^[^:]*:[[:space:]]*/, "")
+      gsub(/^["\047 ]+|["\047 ]+$/, "")
+      print
+      exit
+    }
+  ' config/config.yml
+}
+
 STUDY_NAME="$(read_study_name)"
 if [[ -z "${STUDY_NAME}" ]]; then
   STUDY_NAME="pipeline"
@@ -82,6 +94,20 @@ conda activate snakemake
 
 echo "Using snakemake: $(which snakemake) ; version: $(snakemake --version || true)"
 
+# Reuse rule-specific environments across project clones. Snakemake identifies
+# environments from their definitions and creates only missing/changed ones.
+# SNAKEMAKE_CONDA_PREFIX can override the config value for a particular system.
+CONDA_ENV_PREFIX="${SNAKEMAKE_CONDA_PREFIX:-$(read_config_value conda_envs_dir)}"
+if [[ -z "${CONDA_ENV_PREFIX}" ]]; then
+  if [[ -d .snakemake/conda ]]; then
+    CONDA_ENV_PREFIX=".snakemake"
+  else
+    CONDA_ENV_PREFIX="../eASV-conda-envs"
+  fi
+fi
+mkdir -p "${CONDA_ENV_PREFIX}"
+echo "Rule-specific Conda environments: ${CONDA_ENV_PREFIX}"
+
 # Optional target passed to the script becomes the Snakemake target.
 # Example: bash run_snakemake_USC_CARC_only.sh results/02-proks/sample-metadata.tsv
 TARGET="${1:-}"
@@ -92,6 +118,7 @@ SNAKEMAKE_ARGS=(
   --cores "${PIPELINE_CORES}"
   --resources mem_mb=120000
   --use-conda
+  --conda-prefix "${CONDA_ENV_PREFIX}"
   --rerun-incomplete
   --latency-wait 60
   --printshellcmds
@@ -105,6 +132,7 @@ fi
 # - --cores: use every CPU allocated by Slurm
 # - --resources: prevent concurrent rules from exceeding the node's memory
 # - --use-conda: create/use conda envs declared in workflow
+# - --conda-prefix: reuse matching rule environments across project clones
 # - --rerun-incomplete: pick up partial outputs
 # - --latency-wait: wait for N seconds when a file appears missing on shared filesystems
 if snakemake "${SNAKEMAKE_ARGS[@]}"; then
