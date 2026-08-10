@@ -64,7 +64,7 @@ or provide allocation settings appropriate for their scheduler.
 From the project directory, submit the CARC job with:
 
 ```bash
-bash run_snakemake_USC_CARC_only.sh
+sbatch run_snakemake_USC_CARC_only.sh
 ```
 
 The script reads `studyName` from `config/config.yml`, submits itself through
