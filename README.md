@@ -88,6 +88,12 @@ control, domain composition, 16S/18S/chloroplast/mitochondrial assignments,
 unassigned sequences, abundant taxa, and—when enabled—the
 internal-standard results and figures.
 
+The taxonomy explorer can filter samples by any populated metadata column in
+`config/samples.tsv` and display every taxonomy level present in the formatted
+data, from domain through species (including PR2 ranks and ProPortal ecotypes).
+It is embedded in the self-contained report and works without an internet
+connection.
+
 For convenient downloading, the workflow also copies the report and formatted
 data tables into the top-level `Results-Export/` folder. When internal standards
 are enabled, the corrected ASV table is included there as well.

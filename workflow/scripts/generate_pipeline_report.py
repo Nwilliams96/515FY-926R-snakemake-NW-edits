@@ -3,6 +3,7 @@
 import base64
 import csv
 import html
+import json
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -14,6 +15,149 @@ PALETTE = [
     "#0891b2", "#65a30d", "#db2777", "#4f46e5", "#ea580c",
     "#64748b",
 ]
+
+TAXONOMY_RANKS = (
+    "Domain", "Supergroup", "Division", "Subdivision", "Phylum", "Class",
+    "Order", "Family", "Genus", "Species", "ProPortal_ASV_Ecotype",
+)
+
+TAXONOMY_EXPLORER_JS = r"""
+(() => {
+  const source = document.getElementById("taxonomy-explorer-data");
+  if (!source) return;
+  const data = JSON.parse(source.textContent);
+  const fieldSelect = document.getElementById("taxonomy-metadata-field");
+  const valueSelect = document.getElementById("taxonomy-metadata-value");
+  const rankSelect = document.getElementById("taxonomy-rank");
+  const summary = document.getElementById("taxonomy-filter-summary");
+  const chart = document.getElementById("taxonomy-explorer-chart");
+  const tableBody = document.getElementById("taxonomy-explorer-body");
+  const numberFormat = new Intl.NumberFormat();
+
+  function appendOption(select, value, label) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+
+  appendOption(fieldSelect, "", "All samples");
+  data.metadataFields.forEach(field => appendOption(fieldSelect, field, field));
+  data.ranks.forEach(rank => appendOption(
+    rankSelect,
+    rank,
+    rank === "ProPortal_ASV_Ecotype" ? "ProPortal ASV ecotype" : rank
+  ));
+  if (data.ranks.includes("Domain")) rankSelect.value = "Domain";
+
+  function refreshMetadataValues() {
+    const field = fieldSelect.value;
+    valueSelect.replaceChildren();
+    appendOption(valueSelect, "", "All values");
+    valueSelect.disabled = !field;
+    if (!field) return;
+    const values = new Set();
+    Object.values(data.samples).forEach(sample => {
+      const value = sample.metadata[field];
+      if (value !== undefined && value !== null && String(value).trim() !== "") {
+        values.add(String(value));
+      }
+    });
+    Array.from(values).sort((a, b) => a.localeCompare(b, undefined, {numeric: true}))
+      .forEach(value => appendOption(valueSelect, value, value));
+  }
+
+  function selectedSamples() {
+    const field = fieldSelect.value;
+    const value = valueSelect.value;
+    return Object.entries(data.samples).filter(([, sample]) => {
+      if (!field || !value) return true;
+      return String(sample.metadata[field] ?? "") === value;
+    });
+  }
+
+  function render() {
+    const rank = rankSelect.value;
+    const selected = selectedSamples();
+    const totals = new Map();
+    const detections = new Map();
+    selected.forEach(([, sample]) => {
+      const counts = sample.taxonomy[rank] || {};
+      Object.entries(counts).forEach(([taxon, abundance]) => {
+        const numeric = Number(abundance) || 0;
+        if (numeric <= 0) return;
+        totals.set(taxon, (totals.get(taxon) || 0) + numeric);
+        detections.set(taxon, (detections.get(taxon) || 0) + 1);
+      });
+    });
+    const rows = Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20);
+    const grandTotal = Array.from(totals.values()).reduce((sum, value) => sum + value, 0);
+    const maxValue = rows.length ? rows[0][1] : 1;
+
+    const field = fieldSelect.value;
+    const value = valueSelect.value;
+    const filterText = field && value ? `${field} = ${value}` : "all sample metadata";
+    summary.textContent = `${selected.length} sample(s) included · ${filterText} · ${rank}`;
+
+    chart.replaceChildren();
+    tableBody.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement("p");
+      empty.className = "small-muted";
+      empty.textContent = "No positive-abundance taxonomy records match this selection.";
+      chart.appendChild(empty);
+      return;
+    }
+
+    rows.slice(0, 12).forEach(([taxon, abundance]) => {
+      const row = document.createElement("div");
+      row.className = "taxonomy-bar-row";
+      const label = document.createElement("div");
+      label.className = "taxonomy-bar-label";
+      label.textContent = taxon;
+      const track = document.createElement("div");
+      track.className = "taxonomy-bar-track";
+      const fill = document.createElement("div");
+      fill.className = "taxonomy-bar-fill";
+      fill.style.width = `${100 * abundance / maxValue}%`;
+      track.appendChild(fill);
+      const count = document.createElement("div");
+      count.className = "taxonomy-bar-count";
+      count.textContent = numberFormat.format(Math.round(abundance));
+      row.append(label, track, count);
+      chart.appendChild(row);
+    });
+
+    rows.forEach(([taxon, abundance], index) => {
+      const tr = document.createElement("tr");
+      const values = [
+        index + 1,
+        taxon,
+        numberFormat.format(Math.round(abundance)),
+        grandTotal ? `${(100 * abundance / grandTotal).toFixed(2)}%` : "—",
+        detections.get(taxon) || 0,
+      ];
+      values.forEach(value => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tableBody.appendChild(tr);
+    });
+  }
+
+  fieldSelect.addEventListener("change", () => {
+    refreshMetadataValues();
+    render();
+  });
+  valueSelect.addEventListener("change", render);
+  rankSelect.addEventListener("change", render);
+  refreshMetadataValues();
+  render();
+})();
+"""
 
 
 def esc(value):
@@ -280,6 +424,60 @@ def taxonomy_label(row):
     return "Unassigned"
 
 
+def taxonomy_value(row, rank):
+    value = str(row.get(rank) or "").strip()
+    if value and value.lower() not in {"na", "nan", "none", "unassigned"}:
+        return value
+    return f"Unassigned at {rank.replace('_', ' ')}"
+
+
+def build_taxonomy_explorer_data(sample_rows, long_rows, abundance_column):
+    """Pre-aggregate taxonomy counts for an offline, interactive HTML report."""
+    metadata_fields = []
+    for row in sample_rows:
+        for field in row:
+            normalized = re.sub(r"[^a-z0-9]", "", field.lower())
+            if normalized in {"sample", "sampleid"} or field in metadata_fields:
+                continue
+            if any(str(candidate.get(field) or "").strip() for candidate in sample_rows):
+                metadata_fields.append(field)
+
+    metadata_by_sample = {}
+    sample_order = []
+    for row in sample_rows:
+        sample = first_value(row, ["sample", "sample-id", "sampleid"])
+        sample = normalize_sample_id(sample)
+        if not sample:
+            continue
+        sample_order.append(sample)
+        metadata_by_sample[sample] = {
+            field: str(row.get(field) or "").strip() for field in metadata_fields
+        }
+
+    ranks = [rank for rank in TAXONOMY_RANKS if any(rank in row for row in long_rows)]
+    taxonomy_by_sample = defaultdict(lambda: defaultdict(Counter))
+    for row in long_rows:
+        sample = normalize_sample_id(row.get("SampleID"))
+        abundance = number(row.get(abundance_column)) or 0
+        if not sample or abundance <= 0:
+            continue
+        if sample not in sample_order:
+            sample_order.append(sample)
+        for rank in ranks:
+            taxonomy_by_sample[sample][rank][taxonomy_value(row, rank)] += abundance
+
+    samples = {}
+    for sample in sample_order:
+        samples[sample] = {
+            "metadata": metadata_by_sample.get(sample, {}),
+            "taxonomy": {
+                rank: dict(taxonomy_by_sample[sample].get(rank, {}))
+                for rank in ranks
+            },
+        }
+    return {"metadataFields": metadata_fields, "ranks": ranks, "samples": samples}
+
+
 def sequence_assignment(row):
     lineage = " ".join(
         str(row.get(key) or "")
@@ -370,6 +568,12 @@ def render_report(config, paths, output_path):
     abundance_column = "Corrected_Sequence_Counts"
     if long_rows and abundance_column not in long_rows[0]:
         abundance_column = "Raw_Sequence_Counts"
+    taxonomy_explorer_data = build_taxonomy_explorer_data(
+        sample_rows, long_rows, abundance_column
+    )
+    taxonomy_explorer_json = json.dumps(
+        taxonomy_explorer_data, ensure_ascii=False, separators=(",", ":")
+    ).replace("</", "<\\/")
     domains_by_sample = defaultdict(Counter)
     assignment_totals = Counter()
     taxa_totals = Counter()
@@ -492,7 +696,9 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 .pill{{display:inline-block;padding:3px 8px;border-radius:99px;font-size:12px;font-weight:750}} .pill.good{{background:#dcfce7;color:#166534}} .pill.warn{{background:#fef3c7;color:#92400e}} .pill.bad{{background:#fee2e2;color:#991b1b}} .pill.neutral{{background:#e2e8f0;color:#475569}}
 .svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
 .chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
+.explorer-controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:22px 0 12px}} .explorer-control label{{display:block;margin-bottom:5px;color:#344054;font-size:13px;font-weight:750}} .explorer-control select{{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:var(--ink);font:inherit}} .explorer-control select:disabled{{background:#f1f5f9;color:#94a3b8}} .small-muted{{color:var(--muted);font-size:13px}} .taxonomy-chart{{display:grid;gap:8px;margin:20px 0 26px}} .taxonomy-bar-row{{display:grid;grid-template-columns:minmax(120px,220px) minmax(180px,1fr) 90px;gap:10px;align-items:center}} .taxonomy-bar-label{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#344054;font-size:13px}} .taxonomy-bar-track{{height:24px;background:#e8eef7;border-radius:5px;overflow:hidden}} .taxonomy-bar-fill{{height:100%;min-width:2px;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:5px}} .taxonomy-bar-count{{text-align:right;font-variant-numeric:tabular-nums;font-size:13px;font-weight:700}}
 .report-figure{{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin:18px auto}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
+@media(max-width:650px){{.taxonomy-bar-row{{grid-template-columns:minmax(90px,130px) minmax(100px,1fr) 70px}}}}
 @media print{{nav{{display:none}}body{{background:white}}section{{box-shadow:none;break-inside:avoid}}}}
 </style></head><body>
 <header><div class="eyebrow" style="color:#bfdbfe">515Y/926R amplicon workflow</div><h1>{esc(study)}</h1><p>Pipeline summary generated {esc(generated)}</p></header>
@@ -504,9 +710,9 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">DADA2 processing</div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div></section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
-<section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Most abundant taxa</h2><p>For SILVA assignments this uses phylum where available; for PR2 it uses division or supergroup.</p>{taxa_chart}<h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></section>
+<section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy explorer</h2><p>Use a populated field from <code>samples.tsv</code> to examine a sample group, then choose any taxonomy level available in the formatted results. Counts use <code>{esc(abundance_column)}</code>. The chart shows the 12 most abundant taxa and the table shows the top 20.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-metadata-field">Sample metadata field</label><select id="taxonomy-metadata-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Metadata value</label><select id="taxonomy-metadata-value"></select></div><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Filtered taxonomic abundance chart"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive filters require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
 {internal_section}
-</main></body></html>"""
+</main><script type="application/json" id="taxonomy-explorer-data">{taxonomy_explorer_json}</script><script>{TAXONOMY_EXPLORER_JS}</script></body></html>"""
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(document, encoding="utf-8")

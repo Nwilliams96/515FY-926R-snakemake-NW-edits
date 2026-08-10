@@ -81,6 +81,12 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Chimera-removal loss", rendered)
             self.assertIn("Not applicable", rendered)
             self.assertIn("Proteobacteria", rendered)
+            self.assertIn("Interactive taxonomy explorer", rendered)
+            self.assertIn('id="taxonomy-explorer-data"', rendered)
+            self.assertIn('id="taxonomy-metadata-field"', rendered)
+            self.assertIn('id="taxonomy-rank"', rendered)
+            self.assertIn('"metadataFields":["condition"]', rendered)
+            self.assertIn('"Phylum":{"Proteobacteria":600.0,', rendered)
             self.assertIn("Sequence assignments", rendered)
             self.assertIn("total 16S", rendered)
             self.assertIn("750</strong><span>total 16S", rendered)
@@ -99,6 +105,19 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("n_reads_learn", rendered)
             self.assertNotIn("Median base-quality profiles", rendered)
             self.assertNotIn("Where reads were retained or lost", rendered)
+
+            explorer = REPORT.build_taxonomy_explorer_data(
+                REPORT.read_tsv(root / "samples.tsv"),
+                REPORT.read_tsv(root / "long.tsv"),
+                "Corrected_Sequence_Counts",
+            )
+            self.assertEqual(explorer["metadataFields"], ["condition"])
+            self.assertIn("Phylum", explorer["ranks"])
+            self.assertEqual(explorer["samples"]["S-1"]["metadata"]["condition"], "test")
+            self.assertEqual(
+                explorer["samples"]["S-1"]["taxonomy"]["Phylum"]["Proteobacteria"],
+                600,
+            )
 
             domain_chart = REPORT.svg_composition(
                 {"S-1": {"Bacteria": 60, "Eukaryota": 40}},
