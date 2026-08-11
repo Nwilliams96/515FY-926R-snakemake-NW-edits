@@ -103,6 +103,11 @@ generic `pipeline` label because Slurm opens it before the script runs.
 Before starting Snakemake, the CARC runner also detects config files whose
 timestamps are ahead of the compute-node clock and resets only those timestamps.
 This prevents clock-skew failures after moving ZIP packages between computers.
+The runner gives every Slurm job a package cache under CARC's job-specific
+`TMPDIR` while retaining completed rule environments in the configured shared
+`conda_envs_dir`. This prevents simultaneous jobs on different nodes from
+contending for Conda metadata in `~/.conda/pkgs` and avoids stale-file-handle
+failures during environment creation.
 
 When databases must be built, SILVA and PR2 preparation can run concurrently.
 BBSplit indexing and both primer-extraction steps use up to eight cores. QIIME's

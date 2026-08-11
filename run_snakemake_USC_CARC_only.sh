@@ -87,6 +87,16 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 
+# CARC assigns each compute job a unique node-local TMPDIR. Keep Conda's
+# downloaded-package and repository-metadata cache there so simultaneous jobs
+# on different nodes never read or modify the same cache in ~/.conda/pkgs.
+# Completed Snakemake rule environments remain in the shared conda_envs_dir.
+CONDA_JOB_TMPDIR="${TMPDIR:-/tmp/SLURM_${SLURM_JOB_ID}}"
+CONDA_JOB_PKGS_DIR="${CONDA_JOB_TMPDIR%/}/eASV-conda-pkgs"
+mkdir -p "${CONDA_JOB_PKGS_DIR}"
+export CONDA_PKGS_DIRS="${CONDA_JOB_PKGS_DIR}"
+echo "Job-local Conda package cache: ${CONDA_PKGS_DIRS}"
+
 # Ensure conda is available in this shell and activate your snakemake env
 # (this uses the conda shims so it works with modern conda installs)
 eval "$(conda shell.bash hook)"
