@@ -129,11 +129,12 @@ control, domain composition, 16S/18S/chloroplast/mitochondrial assignments,
 unassigned sequences, abundant taxa, and—when enabled—the
 internal-standard results and figures.
 
-The taxonomy explorer can filter samples by any populated metadata column in
-`config/samples.tsv` and display every taxonomy level present in the formatted
-data, from domain through species (including PR2 ranks and ProPortal ecotypes).
-It is embedded in the self-contained report and works without an internet
-connection.
+The taxonomy explorer provides a QIIME 2-style, 100%-stacked taxonomic bar plot
+with one bar per sample. It can order and filter plotted samples by SampleID,
+Condition, Latitude, Longitude, or Depth from `config/samples.tsv`, and display
+every taxonomy level present in the formatted data, from domain through species
+(including PR2 ranks and ProPortal ecotypes). It is embedded in the
+self-contained report and works without an internet connection.
 
 For convenient downloading, the workflow also copies the report and formatted
 data tables into the top-level `Results-Export/` folder. When internal standards

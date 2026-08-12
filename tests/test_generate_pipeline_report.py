@@ -18,7 +18,11 @@ class GeneratePipelineReportTests(unittest.TestCase):
     def test_renders_summary_and_optional_figure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "samples.tsv").write_text("sample\tcondition\nS_1\ttest\n", encoding="utf-8")
+            (root / "samples.tsv").write_text(
+                "sample\tcondition\tLatitude [degrees_north]\tLongitude [degrees_east]\tDepth (m)\n"
+                "S_1\ttest\t-39.49\t99.39\t2\n",
+                encoding="utf-8",
+            )
             (root / "split.tsv").write_text(
                 "sample\tprok_seqs_split\teuk_seqs_split\ttotal_seqs_split\teukfrac_split\n"
                 "S_1\t700\t300\t1000\t0.3\n",
@@ -90,11 +94,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("S-1: 800", rendered)
             self.assertIn("Not applicable", rendered)
             self.assertIn("Proteobacteria", rendered)
-            self.assertIn("Interactive taxonomy explorer", rendered)
+            self.assertIn("Interactive taxonomy bar plot", rendered)
             self.assertIn('id="taxonomy-explorer-data"', rendered)
-            self.assertIn('id="taxonomy-metadata-field"', rendered)
+            self.assertIn('id="taxonomy-plot-field"', rendered)
             self.assertIn('id="taxonomy-rank"', rendered)
-            self.assertIn('"metadataFields":["condition"]', rendered)
+            self.assertIn(
+                '"metadataFields":["SampleID","Condition","Latitude","Longitude","Depth"]',
+                rendered,
+            )
             self.assertIn('"Phylum":{"Proteobacteria":600.0,', rendered)
             self.assertIn("Sequence assignments", rendered)
             self.assertIn("total 16S", rendered)
@@ -120,9 +127,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 REPORT.read_tsv(root / "long.tsv"),
                 "Corrected_Sequence_Counts",
             )
-            self.assertEqual(explorer["metadataFields"], ["condition"])
+            self.assertEqual(
+                explorer["metadataFields"],
+                ["SampleID", "Condition", "Latitude", "Longitude", "Depth"],
+            )
             self.assertIn("Phylum", explorer["ranks"])
-            self.assertEqual(explorer["samples"]["S-1"]["metadata"]["condition"], "test")
+            self.assertEqual(explorer["samples"]["S-1"]["metadata"]["SampleID"], "S-1")
+            self.assertEqual(explorer["samples"]["S-1"]["metadata"]["Condition"], "test")
+            self.assertEqual(explorer["samples"]["S-1"]["metadata"]["Latitude"], "-39.49")
             self.assertEqual(
                 explorer["samples"]["S-1"]["taxonomy"]["Phylum"]["Proteobacteria"],
                 600,
