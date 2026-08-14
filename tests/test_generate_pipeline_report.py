@@ -107,6 +107,8 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn('id="taxonomy-explorer-data"', rendered)
             self.assertIn('id="taxonomy-plot-field"', rendered)
             self.assertIn('id="taxonomy-rank"', rendered)
+            self.assertIn("justify-content:flex-start", rendered)
+            self.assertIn("top:308px", rendered)
             self.assertIn(
                 '"metadataFields":["SampleID","Condition","Latitude","Longitude","Depth"]',
                 rendered,
