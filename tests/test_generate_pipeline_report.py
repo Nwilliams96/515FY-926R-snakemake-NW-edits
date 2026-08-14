@@ -60,10 +60,18 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
                 b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
             )
+            (root / "corrected.tsv").write_text(
+                "SampleID\tDomain\tisd_1_recovery_ratio\trecovery_mean\t"
+                "Copies_BP_recovery_ratio\n"
+                "S-1\tBacteria\t0.25\t0.25\t2400\n"
+                "S-1\tEukaryota\t0.25\t0.25\t800\n",
+                encoding="utf-8",
+            )
             output = root / "report.html"
             REPORT.render_report(
                 {
                     "studyName": "test-run",
+                    "intstds": ["BP"],
                     "trunclens": {"truncR1": 220, "truncR2": 180},
                     "dada2": {
                         "prokaryotes": {"max_ee_f": 3.5},
@@ -78,6 +86,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "cutadapt_qc": [root / "S_1.qc.txt"],
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
+                    "internal_standard_table": [root / "corrected.tsv"],
                 },
                 output,
             )
@@ -110,7 +119,9 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("50</strong><span>mitochondrial 16S", rendered)
             self.assertIn("25</strong><span>unassigned", rendered)
             self.assertIn("Sequence-assignment counts", rendered)
-            self.assertIn("data:image/png;base64,", rendered)
+            self.assertIn("Recovery ratios by sample (log10 scale)", rendered)
+            self.assertIn("Domain abundance by correction method", rendered)
+            self.assertIn("S-1 — BP: 0.25", rendered)
             self.assertIn("trunclens.truncR1", rendered)
             self.assertIn("Effective DADA2 settings used", rendered)
             self.assertIn("max_ee_f", rendered)

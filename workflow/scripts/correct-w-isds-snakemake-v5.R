@@ -50,16 +50,32 @@ row_summary <- function(values, summary_function) {
   })
 }
 
-make_wide_table <- function(data, copy_column) {
-  data %>%
+make_wide_table <- function(data, copy_column, annotation_columns) {
+  annotations <- data %>%
+    select(ASV_hash, all_of(annotation_columns)) %>%
+    distinct(ASV_hash, .keep_all = TRUE)
+  wide <- data %>%
     select(SampleID, ASV_hash, all_of(copy_column)) %>%
     group_by(ASV_hash, SampleID) %>%
     summarise(Abundance = sum(.data[[copy_column]], na.rm = TRUE), .groups = "drop") %>%
     pivot_wider(names_from = SampleID, values_from = Abundance, values_fill = 0)
+  sample_columns <- sort(setdiff(names(wide), "ASV_hash"))
+  annotations %>%
+    left_join(wide, by = "ASV_hash") %>%
+    select(ASV_hash, all_of(annotation_columns), all_of(sample_columns)) %>%
+    arrange(ASV_hash)
 }
 
 # Input data and validation -------------------------------------------------
 asv_table <- read_tsv(snakemake@input[["asv_table"]], show_col_types = FALSE)
+# Preserve every ASV-level annotation supplied by the formatted table. This is
+# intentionally data-driven so taxonomy columns from future classifiers are
+# carried into every wide correction table without another script change.
+measurement_columns <- c(
+  "SampleID", "Raw_Sequence_Counts", "Corrected_dada2_Sequence_Counts",
+  "Corrected_Sequence_Counts", "Relative_Abundance"
+)
+wide_annotation_columns <- setdiff(names(asv_table), c(measurement_columns, "ASV_hash"))
 isd <- read_tsv(snakemake@input[["isd"]], show_col_types = FALSE)
 isd_added <- read_tsv(snakemake@input[["isd_added"]], show_col_types = FALSE) %>%
   rename(SampleID = sample) %>%
@@ -258,6 +274,7 @@ plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
     linewidth = 1
   ) +
   theme_minimal() +
+  scale_y_log10() +
   scale_colour_discrete(name = "Correction method") +
   labs(
     title = "Recovery Ratios per Sample",
@@ -265,7 +282,7 @@ plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
       "Configured standards: ", configured_standard_names,
       ". Black line = per-sample mean."
     ),
-    y = "Recovery Ratio",
+    y = "Recovery Ratio (log10 scale)",
     x = "Sample"
   ) +
   theme(
@@ -343,7 +360,10 @@ walk2(
   method_table_outputs,
   method_specs$copy_column,
   function(output_path, copy_column) {
-    write_tsv(make_wide_table(asv_table, copy_column), output_path)
+    write_tsv(
+      make_wide_table(asv_table, copy_column, wide_annotation_columns),
+      output_path
+    )
   }
 )
 
@@ -357,12 +377,16 @@ pdf(snakemake@output[["domain_plot"]], width = 12, height = domain_plot_height)
 print(plot2)
 dev.off()
 
-png(snakemake@output[["recovery_plot_png"]], width = 1800, height = 900, res = 150)
+sample_plot_width <- max(1800, 42 * n_distinct(asv_table$SampleID))
+png(
+  snakemake@output[["recovery_plot_png"]],
+  width = sample_plot_width, height = 900, res = 150
+)
 print(plot1)
 dev.off()
 png(
   snakemake@output[["domain_plot_png"]],
-  width = 1800,
+  width = sample_plot_width,
   height = max(1200, 360 * nrow(method_specs)),
   res = 150
 )

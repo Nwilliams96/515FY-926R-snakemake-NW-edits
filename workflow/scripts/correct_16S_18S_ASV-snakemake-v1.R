@@ -54,7 +54,7 @@ required_concentration_columns <- c("sample_type", "amount_pM")
 missing_concentration_columns <- setdiff(required_concentration_columns, names(amplicon_concentrations))
 if (length(missing_concentration_columns) > 0) {
   stop(
-    "config/prok_and_euk_SSU_amplicon_concentrations.tsv is missing required column(s): ",
+    "config/prok_and_euk_SSU_amplicon_molarities.tsv is missing required column(s): ",
     paste(missing_concentration_columns, collapse = ", "),
     ". Expected columns: sample_type and amount_pM."
   )
@@ -91,7 +91,7 @@ if (
   (Concentration_16S + Concentration_18S) <= 0
 ) {
   stop(
-    "config/prok_and_euk_SSU_amplicon_concentrations.tsv must contain exactly one 16S row and one 18S row, ",
+    "config/prok_and_euk_SSU_amplicon_molarities.tsv must contain exactly one 16S row and one 18S row, ",
     "with non-negative numeric amount_pM values whose sum is greater than zero."
   )
 }

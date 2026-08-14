@@ -113,9 +113,12 @@ run_case <- function(number_of_standards) {
   stopifnot(file.exists(snakemake@output[["domain_plot_png"]]))
 
   corrected <- read_tsv(snakemake@output[["corrected"]], show_col_types = FALSE)
+  first_wide <- read_tsv(method_outputs[[1]], show_col_types = FALSE)
   stopifnot(!"internal-hash-1" %in% corrected$ASV_hash)
   stopifnot("biological-hash" %in% corrected$ASV_hash)
   stopifnot(paste0("Copies_Standard-", number_of_standards, "_recovery_ratio") %in% names(corrected))
+  stopifnot("Domain" %in% names(first_wide))
+  stopifnot("Sample-1" %in% names(first_wide))
   if (number_of_standards >= 2) {
     stopifnot(any(grepl("_and_", names(corrected), fixed = TRUE)))
   }

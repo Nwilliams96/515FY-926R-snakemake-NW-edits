@@ -98,14 +98,23 @@ INTERNAL_STANDARD_METHOD_STEMS = (
 )
 
 NEW_AMPLICON_CONCENTRATIONS_FILE = (
+    "config/prok_and_euk_SSU_amplicon_molarities.tsv"
+)
+PREVIOUS_AMPLICON_CONCENTRATIONS_FILE = (
     "config/prok_and_euk_SSU_amplicon_concentrations.tsv"
 )
 LEGACY_AMPLICON_CONCENTRATIONS_FILE = "config/bioanalyzer.tsv"
-AMPLICON_CONCENTRATIONS_FILE = (
-    LEGACY_AMPLICON_CONCENTRATIONS_FILE
-    if os.path.exists(LEGACY_AMPLICON_CONCENTRATIONS_FILE)
-    and not os.path.exists(NEW_AMPLICON_CONCENTRATIONS_FILE)
-    else NEW_AMPLICON_CONCENTRATIONS_FILE
+AMPLICON_CONCENTRATIONS_FILE = next(
+    (
+        path
+        for path in [
+            NEW_AMPLICON_CONCENTRATIONS_FILE,
+            PREVIOUS_AMPLICON_CONCENTRATIONS_FILE,
+            LEGACY_AMPLICON_CONCENTRATIONS_FILE,
+        ]
+        if os.path.exists(path)
+    ),
+    NEW_AMPLICON_CONCENTRATIONS_FILE,
 )
 
 DATABASE_DIR = os.path.normpath(config["database_dir"])
@@ -151,21 +160,33 @@ if USE_PREEXISTING_DATABASES:
             "use_preexisting_databases to false so the workflow builds them."
         )
 
-# Small, user-facing files copied into one folder at the end of the run.
+# Small, user-facing files copied into a project-specific folder at the end of
+# the run. Older configs without projectName use studyName.
+PROJECT_NAME = str(config.get("projectName", config["studyName"])).strip()
+if not re.fullmatch(r"[A-Za-z0-9._-]+", PROJECT_NAME):
+    raise WorkflowError(
+        "projectName may contain only letters, numbers, periods, underscores, "
+        "and hyphens"
+    )
+RESULTS_EXPORT_DIR = PROJECT_NAME + "-Results-Export"
 RESULTS_EXPORT_INPUTS = [
     "results/04-formatted/" + config["studyName"] + ".long_data.tsv",
     "results/04-formatted/" + config["studyName"] + ".asv_sequences.tsv",
     "results/07-report/" + config["studyName"] + ".pipeline-report.html",
 ]
 RESULTS_EXPORT_OUTPUTS = [
-    "Results-Export/" + config["studyName"] + ".long_data.tsv",
-    "Results-Export/" + config["studyName"] + ".asv_sequences.tsv",
-    "Results-Export/" + config["studyName"] + ".pipeline-report.html",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".long_data.tsv",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".asv_sequences.tsv",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".pipeline-report.html",
+]
+RESULTS_EXPORT_SUMMARIES = [
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".phylum_summary.tsv",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".order_summary.tsv",
 ]
 if USE_INTERNAL_STANDARDS:
     RESULTS_EXPORT_INPUTS.append(ISD_CORRECTED_LONG_TABLE)
     RESULTS_EXPORT_OUTPUTS.append(
-        "Results-Export/"
+        RESULTS_EXPORT_DIR + "/"
         + config["studyName"]
         + "."
         + ALL_INTERNAL_STANDARD_IDS_STEM
@@ -240,7 +261,8 @@ def get_final_output():
         final_output.append(ISD_CORRECTED_LONG_TABLE)
 
     final_output.extend(RESULTS_EXPORT_OUTPUTS)
-    final_output.append("Results-Export/README.txt")
+    final_output.extend(RESULTS_EXPORT_SUMMARIES)
+    final_output.append(RESULTS_EXPORT_DIR + "/README.txt")
 
     return final_output
 

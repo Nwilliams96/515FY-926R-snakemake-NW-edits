@@ -39,7 +39,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         correction_rule = (
             ROOT / "workflow/rules/05-internal-standard-correction.smk"
         ).read_text(encoding="utf-8")
-        self.assertIn("prok_and_euk_SSU_amplicon_concentrations.tsv", common)
+        self.assertIn("prok_and_euk_SSU_amplicon_molarities.tsv", common)
         self.assertIn("LEGACY_AMPLICON_CONCENTRATIONS_FILE", common)
         self.assertIn("amplicon_concentrations=AMPLICON_CONCENTRATIONS_FILE", merge_rule)
         self.assertIn('f"{standard_id}_recovery_ratio"', common)

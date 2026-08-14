@@ -57,10 +57,11 @@ by every single-standard and combination output is explicit. The combined long
 table similarly includes all configured IDs, for example
 `<study>.BP_DR.ISD_corrected_long_data.tsv`.
 
-The required starting-pool concentration file is named
-`config/prok_and_euk_SSU_amplicon_concentrations.tsv`. Updated workflows still
-accept an existing `config/bioanalyzer.tsv` when the new file is absent, allowing
-older study folders to finish after a pipeline update.
+The required starting-pool molarity file is named
+`config/prok_and_euk_SSU_amplicon_molarities.tsv`. Updated workflows still
+accept the previous `config/prok_and_euk_SSU_amplicon_concentrations.tsv` or
+`config/bioanalyzer.tsv` when the new file is absent, allowing older study
+folders to finish after a pipeline update.
 
 Additional user-defined columns may be added to `config/samples.tsv`. They are
 preserved in the generated QIIME metadata and are available as filters in the
@@ -136,6 +137,8 @@ every taxonomy level present in the formatted data, from domain through species
 (including PR2 ranks and ProPortal ecotypes). It is embedded in the
 self-contained report and works without an internet connection.
 
-For convenient downloading, the workflow also copies the report and formatted
-data tables into the top-level `Results-Export/` folder. When internal standards
-are enabled, the corrected ASV table is included there as well.
+For convenient downloading, the workflow copies the report, formatted data,
+and phylum- and order-level summaries into a top-level
+`<projectName>-Results-Export/` folder. When internal standards are enabled, the
+corrected ASV table is included there as well. Older configs without
+`projectName` use `studyName` for the folder prefix.

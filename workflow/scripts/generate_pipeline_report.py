@@ -4,6 +4,7 @@ import base64
 import csv
 import html
 import json
+import math
 import re
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -528,7 +529,134 @@ def svg_assignment_counts(assignment_totals):
 def embedded_image(path):
     raw = Path(path).read_bytes()
     encoded = base64.b64encode(raw).decode("ascii")
-    return f'<img class="report-figure" src="data:image/png;base64,{encoded}" alt="{esc(Path(path).stem)}">'
+    return (
+        '<div class="figure-scroll">'
+        f'<img class="report-figure" src="data:image/png;base64,{encoded}" '
+        f'alt="{esc(Path(path).stem)}">'
+        '</div>'
+    )
+
+
+def internal_method_label(column, standard_ids):
+    label = re.sub(r"^Copies_", "", column)
+    for index, standard_id in reversed(list(enumerate(standard_ids, 1))):
+        label = label.replace(f"isd_{index}", standard_id)
+    return label.replace("_mean_recovery_ratio", " mean").replace(
+        "_recovery_ratio", ""
+    ).replace("_", " ")
+
+
+def svg_log_series(sample_order, values, series_labels, title):
+    positives = [
+        value for sample in sample_order for value in values.get(sample, {}).values()
+        if value is not None and value > 0
+    ]
+    if not positives:
+        return '<p class="small-muted">No positive values were available.</p>'
+    width = max(820, 150 + len(sample_order) * 48)
+    height = 470
+    left, right, top, bottom = 90, 30, 35, 115
+    plot_w, plot_h = width - left - right, height - top - bottom
+    low, high = math.log10(min(positives)), math.log10(max(positives))
+    if high - low < 0.5:
+        low -= 0.25
+        high += 0.25
+    colours = {
+        label: PALETTE[index % len(PALETTE)]
+        for index, label in enumerate(series_labels)
+    }
+    pieces = [
+        f'<h4>{esc(title)}</h4><div class="chart-scroll"><svg viewBox="0 0 {width} {height}" '
+        f'style="min-width:{width}px" role="img" aria-label="{esc(title)}">'
+    ]
+    for index in range(5):
+        fraction = index / 4
+        y = top + plot_h * (1 - fraction)
+        tick = 10 ** (low + (high - low) * fraction)
+        pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>')
+        pieces.append(f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" class="svg-label">{fmt_count(tick)}</text>')
+    x_step = plot_w / max(1, len(sample_order))
+    for series_index, label in enumerate(series_labels):
+        points = []
+        for sample_index, sample in enumerate(sample_order):
+            value = values.get(sample, {}).get(label)
+            if value is None or value <= 0:
+                continue
+            x = left + x_step * (sample_index + 0.5)
+            y = top + plot_h * (1 - (math.log10(value) - low) / (high - low))
+            points.append((x, y, sample, value))
+        if len(points) > 1:
+            path = " ".join(
+                ("M" if index == 0 else "L") + f" {x:.1f} {y:.1f}"
+                for index, (x, y, _, _) in enumerate(points)
+            )
+            pieces.append(f'<path d="{path}" fill="none" stroke="{colours[label]}" stroke-width="1.5" opacity=".72"/>')
+        for x, y, sample, value in points:
+            pieces.append(
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="{colours[label]}">'
+                f'<title>{esc(sample)} — {esc(label)}: {value:.6g}</title></circle>'
+            )
+    for sample_index, sample in enumerate(sample_order):
+        x = left + x_step * (sample_index + 0.5)
+        pieces.append(
+            f'<text transform="translate({x:.1f},{height-bottom+12}) rotate(55)" '
+            f'class="svg-label">{esc(sample)}</text>'
+        )
+    pieces.append('</svg></div><div class="chart-legend">')
+    for label in series_labels:
+        pieces.append(
+            f'<span class="legend-item"><span class="legend-swatch" '
+            f'style="background:{colours[label]}"></span>{esc(label)}</span>'
+        )
+    pieces.append("</div>")
+    return "".join(pieces)
+
+
+def internal_standard_html(config, corrected_rows):
+    if not corrected_rows:
+        return ""
+    configured_standards = config.get("intstds", [])
+    if isinstance(configured_standards, dict):
+        configured_standards = configured_standards.values()
+    standard_ids = [str(value) for value in configured_standards]
+    samples = sorted({normalize_sample_id(row.get("SampleID")) for row in corrected_rows if row.get("SampleID")})
+    recovery_columns = [
+        column for column in corrected_rows[0]
+        if column.startswith("isd_") and column.endswith("recovery_ratio")
+        or column in {"recovery_mean", "recovery_median"}
+    ]
+    recovery_labels = [internal_method_label(column, standard_ids) for column in recovery_columns]
+    recovery_values = defaultdict(dict)
+    for row in corrected_rows:
+        sample = normalize_sample_id(row.get("SampleID"))
+        for column, label in zip(recovery_columns, recovery_labels):
+            recovery_values[sample][label] = number(row.get(column))
+
+    copy_columns = [column for column in corrected_rows[0] if column.startswith("Copies_")]
+    domain_totals = {
+        column: defaultdict(lambda: defaultdict(float)) for column in copy_columns
+    }
+    for row in corrected_rows:
+        sample = normalize_sample_id(row.get("SampleID"))
+        domain = (row.get("Domain") or "Unassigned").strip() or "Unassigned"
+        if domain == "Unassigned":
+            continue
+        for column in copy_columns:
+            domain_totals[column][sample][domain] += number(row.get(column)) or 0
+
+    recovery_chart = svg_log_series(
+        samples, recovery_values, recovery_labels, "Recovery ratios by sample (log10 scale)"
+    )
+    domain_charts = []
+    for column in copy_columns:
+        method = internal_method_label(column, standard_ids)
+        domains = sorted({domain for sample in domain_totals[column].values() for domain in sample})
+        chart = svg_log_series(
+            samples, domain_totals[column], domains,
+            f"Domain copies per unit — {method} (log10 scale)",
+        )
+        domain_charts.append(f'<details><summary>{esc(method)}</summary>{chart}</details>')
+    return recovery_chart + "<h3>Domain abundance by correction method</h3>" + "".join(domain_charts)
 
 
 def taxonomy_label(row):
@@ -548,7 +676,41 @@ def taxonomy_value(row, rank):
 
 def build_taxonomy_explorer_data(sample_rows, long_rows, abundance_column):
     """Pre-aggregate taxonomy counts for an offline, interactive HTML report."""
-    metadata_fields = [label for label, _ in TAXONOMY_PLOTTING_FIELDS]
+    headers = list(sample_rows[0]) if sample_rows else []
+    normalized_headers = {
+        re.sub(r"[^a-z0-9]", "", header.lower()): header for header in headers
+    }
+    metadata_sources = [("SampleID", None)]
+    consumed_headers = set()
+    for label, aliases in TAXONOMY_PLOTTING_FIELDS[1:]:
+        source = next(
+            (
+                normalized_headers[re.sub(r"[^a-z0-9]", "", alias.lower())]
+                for alias in aliases
+                if re.sub(r"[^a-z0-9]", "", alias.lower()) in normalized_headers
+            ),
+            None,
+        )
+        if source:
+            metadata_sources.append((label, source))
+            consumed_headers.add(source)
+
+    sample_headers = {
+        normalized_headers.get(re.sub(r"[^a-z0-9]", "", alias.lower()))
+        for alias in TAXONOMY_PLOTTING_FIELDS[0][1]
+    }
+    technical_headers = {
+        "internal_std_normalization_factor", "units"
+    }
+    for header in headers:
+        if (
+            header not in consumed_headers
+            and header not in sample_headers
+            and header not in technical_headers
+            and not header.endswith("_ng")
+        ):
+            metadata_sources.append((header, header))
+    metadata_fields = [label for label, _ in metadata_sources]
 
     metadata_by_sample = {}
     sample_order = []
@@ -559,8 +721,8 @@ def build_taxonomy_explorer_data(sample_rows, long_rows, abundance_column):
             continue
         sample_order.append(sample)
         metadata = {"SampleID": sample}
-        for label, aliases in TAXONOMY_PLOTTING_FIELDS[1:]:
-            metadata[label] = str(first_value(row, aliases) or "").strip()
+        for label, source in metadata_sources[1:]:
+            metadata[label] = str(row.get(source) or "").strip()
         metadata_by_sample[sample] = metadata
 
     ranks = [rank for rank in TAXONOMY_RANKS if any(rank in row for row in long_rows)]
@@ -792,13 +954,22 @@ def render_report(config, paths, output_path):
         for category, value in assignment_summary
     )
     internal_paths = [path for path in paths.get("internal_standard_figures", []) if Path(path).is_file()]
+    internal_table_paths = [
+        path for path in paths.get("internal_standard_table", []) if Path(path).is_file()
+    ]
+    interactive_internal = internal_standard_html(
+        config, read_tsv(internal_table_paths[0]) if internal_table_paths else []
+    )
     internal_section = ""
-    if internal_paths:
+    if interactive_internal or internal_paths:
+        internal_content = interactive_internal or "".join(
+            embedded_image(path) for path in internal_paths
+        )
         internal_section = f"""
         <section id="internal-standards">
           <div class="eyebrow">Optional analysis</div><h2>Internal-standard correction</h2>
-          <p>These figures are produced by the internal-standard correction step and embedded in this report.</p>
-          {''.join(embedded_image(path) for path in internal_paths)}
+          <p>These offline HTML charts support hover values and horizontal scrolling. Recovery ratios and copy abundances use logarithmic y-axes so large dynamic ranges remain visible. Open a correction method below to inspect its domain-abundance plot.</p>
+          {internal_content}
         </section>"""
 
     domain_chart = svg_composition({sample: domains_by_sample[sample] for sample in ordered_samples if domains_by_sample[sample]}, "Domain composition by sample")
@@ -824,12 +995,13 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 .svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
 .chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
 .explorer-controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:22px 0 12px}} .explorer-control label{{display:block;margin-bottom:5px;color:#344054;font-size:13px;font-weight:750}} .explorer-control select{{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:var(--ink);font:inherit}} .explorer-control select:disabled{{background:#f1f5f9;color:#94a3b8}} .small-muted{{color:var(--muted);font-size:13px}} .taxonomy-chart{{overflow-x:auto;margin:20px 0 8px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(to top,#f8fafc 1px,transparent 1px);background-size:100% 25%;padding:20px 18px 70px}} .taxonomy-stacked-plot{{display:flex;align-items:flex-end;gap:5px;height:360px;min-width:max-content;border-bottom:1px solid #94a3b8}} .taxonomy-sample-column{{position:relative;display:flex;flex-direction:column;justify-content:flex-end;width:34px;height:100%}} .taxonomy-stacked-bar{{display:flex;flex-direction:column-reverse;width:100%;height:300px;background:#eef2f6}} .taxonomy-segment{{width:100%;min-height:1px}} .taxonomy-sample-label{{position:absolute;top:306px;left:16px;width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transform:rotate(55deg);transform-origin:left top;color:#475467;font-size:11px}} #taxonomy-explorer-legend{{margin:8px 0 24px;min-width:0;padding-left:0}}
-.report-figure{{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin:18px auto}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
+.figure-scroll{{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px;background:white}} .report-figure{{display:block;max-width:none;height:auto;margin:0}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
+details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0 14px 14px}} summary{{cursor:pointer;font-weight:750;padding:14px 0}}
 @media(max-width:650px){{.taxonomy-sample-column{{width:30px}}}}
 @media print{{nav{{display:none}}body{{background:white}}section{{box-shadow:none;break-inside:avoid}}}}
 </style></head><body>
 <header><div class="eyebrow" style="color:#bfdbfe">515Y/926R amplicon workflow</div><h1>{esc(study)}</h1><p>Pipeline summary generated {esc(generated)}</p></header>
-<nav><a href="#overview">Overview</a><a href="#parameters">Parameters</a><a href="#quality">DADA2</a><a href="#composition">Composition</a><a href="#taxa">Taxa</a>{'<a href="#internal-standards">Internal standards</a>' if internal_paths else ''}</nav>
+<nav><a href="#overview">Overview</a><a href="#parameters">Parameters</a><a href="#quality">DADA2</a><a href="#composition">Composition</a><a href="#taxa">Taxa</a>{'<a href="#internal-standards">Internal standards</a>' if interactive_internal or internal_paths else ''}</nav>
 <main>
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
@@ -855,6 +1027,9 @@ def run_from_snakemake(snakemake_object):
         "long_data": str(snakemake_object.input.long_data),
         "internal_standard_figures": list(
             getattr(snakemake_object.input, "internal_standard_figures", []) or []
+        ),
+        "internal_standard_table": list(
+            getattr(snakemake_object.input, "internal_standard_table", []) or []
         ),
     }
     render_report(dict(snakemake_object.config), paths, str(snakemake_object.output.html))
