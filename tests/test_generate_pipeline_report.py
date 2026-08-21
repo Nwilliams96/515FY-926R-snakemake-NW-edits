@@ -15,6 +15,26 @@ class GeneratePipelineReportTests(unittest.TestCase):
         source = "snakemake = None\n" + SCRIPT.read_text(encoding="utf-8")
         compile(source, str(SCRIPT), "exec")
 
+    def test_non_finite_values_are_treated_as_missing(self):
+        for value in ("NaN", "nan", "Inf", "-Inf", float("nan"), float("inf")):
+            with self.subTest(value=value):
+                self.assertIsNone(REPORT.number(value))
+                self.assertEqual(REPORT.fmt_count(value), "—")
+                self.assertEqual(REPORT.fmt_percent(value), "—")
+
+        chart = REPORT.svg_log_series(
+            ["S-1", "S-2"],
+            {
+                "S-1": {"Bacteria": float("nan"), "Eukaryota": 100},
+                "S-2": {"Bacteria": float("inf"), "Eukaryota": 200},
+            },
+            ["Bacteria", "Eukaryota"],
+            "Non-finite regression test",
+        )
+        self.assertIn("Non-finite regression test", chart)
+        self.assertNotIn(">nan<", chart.lower())
+        self.assertNotIn(">inf<", chart.lower())
+
     def test_renders_summary_and_optional_figure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

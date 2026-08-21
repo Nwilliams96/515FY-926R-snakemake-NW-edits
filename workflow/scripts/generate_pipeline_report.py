@@ -229,17 +229,20 @@ def number(value):
     if value is None or value == "":
         return None
     try:
-        return float(str(value).replace(",", "").strip())
+        parsed = float(str(value).replace(",", "").strip())
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def fmt_count(value):
-    return "—" if value is None else f"{int(round(value)):,}"
+    parsed = number(value)
+    return "—" if parsed is None else f"{int(round(parsed)):,}"
 
 
 def fmt_percent(value):
-    return "—" if value is None else f"{100 * value:.1f}%"
+    parsed = number(value)
+    return "—" if parsed is None else f"{100 * parsed:.1f}%"
 
 
 def fmt_loss(before, after):
@@ -548,8 +551,8 @@ def internal_method_label(column, standard_ids):
 
 def svg_log_series(sample_order, values, series_labels, title):
     positives = [
-        value for sample in sample_order for value in values.get(sample, {}).values()
-        if value is not None and value > 0
+        parsed for sample in sample_order for value in values.get(sample, {}).values()
+        if (parsed := number(value)) is not None and parsed > 0
     ]
     if not positives:
         return '<p class="small-muted">No positive values were available.</p>'
@@ -579,7 +582,7 @@ def svg_log_series(sample_order, values, series_labels, title):
     for series_index, label in enumerate(series_labels):
         points = []
         for sample_index, sample in enumerate(sample_order):
-            value = values.get(sample, {}).get(label)
+            value = number(values.get(sample, {}).get(label))
             if value is None or value <= 0:
                 continue
             x = left + x_step * (sample_index + 0.5)
