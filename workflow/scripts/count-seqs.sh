@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 sample=${snakemake_params[0]}
-totalPROKseqs=`zgrep -c "^@" ${snakemake_input[prok]}`
-totalEUKseqs=`zgrep -c "^@" ${snakemake_input[euk]}`
+totalPROKseqs=$(gzip -cd "${snakemake_input[prok]}" | awk 'END { print NR / 4 }')
+totalEUKseqs=$(gzip -cd "${snakemake_input[euk]}" | awk 'END { print NR / 4 }')
 
 totalSeqs=$(python -c "print($totalEUKseqs + $totalPROKseqs)")
 eukFrac=`bc <<< "scale=8; $totalEUKseqs/$totalSeqs"` 

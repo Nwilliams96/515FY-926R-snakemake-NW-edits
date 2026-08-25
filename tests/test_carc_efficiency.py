@@ -35,6 +35,13 @@ class CarcEfficiencyTests(unittest.TestCase):
         self.assertIn("mem_mb=64000", rules)
         self.assertIn("bbsplit.sh threads={threads}", rules)
 
+    def test_split_counts_use_fastq_records_not_header_like_quality_lines(self):
+        script = (ROOT / "workflow/scripts/count-seqs.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("awk 'END { print NR / 4 }'", script)
+        self.assertNotIn('zgrep -c "^@"', script)
+
     def test_dada2_and_classifiers_receive_rule_threads(self):
         for relative_path in (
             "workflow/scripts/P03-DADA2.sh",

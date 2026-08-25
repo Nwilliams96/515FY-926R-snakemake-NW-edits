@@ -11,10 +11,12 @@ from datetime import datetime
 from pathlib import Path
 
 
+# Paul Tol/Okabe-Ito-inspired qualitative colours chosen to remain distinct
+# under the most common forms of colour-vision deficiency.
 PALETTE = [
-    "#2563eb", "#0d9488", "#f59e0b", "#dc2626", "#7c3aed",
-    "#0891b2", "#65a30d", "#db2777", "#4f46e5", "#ea580c",
-    "#64748b",
+    "#332288", "#88CCEE", "#44AA99", "#117733", "#999933",
+    "#DDCC77", "#CC6677", "#882255", "#AA4499", "#0072B2",
+    "#E69F00", "#009E73", "#D55E00", "#56B4E9", "#64748B",
 ]
 
 TAXONOMY_RANKS = (
@@ -44,10 +46,9 @@ TAXONOMY_EXPLORER_JS = r"""
   const legend = document.getElementById("taxonomy-explorer-legend");
   const numberFormat = new Intl.NumberFormat();
   const palette = [
-    "#2563eb", "#0d9488", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2",
-    "#65a30d", "#db2777", "#4f46e5", "#ea580c", "#14b8a6", "#9333ea",
-    "#84cc16", "#e11d48", "#0284c7", "#d97706", "#16a34a", "#6366f1",
-    "#be123c", "#475569"
+    "#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77",
+    "#CC6677", "#882255", "#AA4499", "#0072B2", "#E69F00", "#009E73",
+    "#D55E00", "#56B4E9", "#64748B"
   ];
 
   function appendOption(select, value, label) {
@@ -118,7 +119,7 @@ TAXONOMY_EXPLORER_JS = r"""
     });
     const rows = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
     const grandTotal = Array.from(totals.values()).reduce((sum, value) => sum + value, 0);
-    const displayedTaxa = rows.slice(0, 19).map(([taxon]) => taxon);
+    const displayedTaxa = rows.slice(0, palette.length).map(([taxon]) => taxon);
     const displayedSet = new Set(displayedTaxa);
     const hasOther = rows.some(([taxon]) => !displayedSet.has(taxon));
     const legendTaxa = hasOther ? [...displayedTaxa, "Other"] : displayedTaxa;
@@ -179,7 +180,18 @@ TAXONOMY_EXPLORER_JS = r"""
       column.append(bar, label);
       plot.appendChild(column);
     });
-    chart.appendChild(plot);
+    const axis = document.createElement("div");
+    axis.className = "taxonomy-y-axis";
+    [100, 75, 50, 25, 0].forEach((tick, index) => {
+      const label = document.createElement("span");
+      label.style.top = `${20 + index * 75}px`;
+      label.textContent = `${tick}%`;
+      axis.appendChild(label);
+    });
+    const scroller = document.createElement("div");
+    scroller.className = "taxonomy-scroll";
+    scroller.appendChild(plot);
+    chart.append(axis, scroller);
 
     legendTaxa.forEach((taxon, index) => {
       const item = document.createElement("span");
@@ -245,6 +257,15 @@ def fmt_percent(value):
     return "—" if parsed is None else f"{100 * parsed:.1f}%"
 
 
+def fmt_axis_value(value):
+    parsed = number(value)
+    if parsed is None:
+        return "—"
+    if abs(parsed) >= 1000:
+        return f"{parsed:,.0f}"
+    return f"{parsed:.3g}"
+
+
 def fmt_loss(before, after):
     if before is None or after is None:
         return "—"
@@ -296,17 +317,36 @@ def parse_dada2_stats(path):
 
 def parse_cutadapt_qc(paths):
     """Read raw pair counts from the per-sample Cutadapt summary files."""
+    return {
+        sample: values["raw"]
+        for sample, values in parse_cutadapt_processing(paths).items()
+        if values["raw"] is not None
+    }
+
+
+def parse_cutadapt_processing(paths):
+    """Read raw and retained pair counts from Cutadapt summary files."""
     result = {}
-    count_pattern = re.compile(
+    raw_pattern = re.compile(
         r"^\s*Total (?:read pairs|reads) processed:\s*([0-9,]+)", re.MULTILINE
+    )
+    retained_pattern = re.compile(
+        r"^\s*Pairs written \(passing filters\):\s*([0-9,]+)", re.MULTILINE
     )
     for path in paths:
         text = Path(path).read_text(encoding="utf-8", errors="replace")
-        match = count_pattern.search(text)
-        if not match:
+        raw_match = raw_pattern.search(text)
+        retained_match = retained_pattern.search(text)
+        if not raw_match and not retained_match:
             continue
         sample = re.sub(r"\.qc\.txt$", "", Path(path).name)
-        result[normalize_sample_id(sample)] = float(match.group(1).replace(",", ""))
+        result[normalize_sample_id(sample)] = {
+            "raw": float(raw_match.group(1).replace(",", "")) if raw_match else None,
+            "retained": (
+                float(retained_match.group(1).replace(",", ""))
+                if retained_match else None
+            ),
+        }
     return result
 
 
@@ -323,28 +363,50 @@ def aggregate_dada2_stats(stats):
     return result
 
 
+def frozen_y_axis(ticks, height, label):
+    """Build a non-scrolling y-axis aligned with a horizontally scrolling plot."""
+    pieces = [
+        f'<svg class="frozen-y-axis" width="78" height="{height}" viewBox="0 0 78 {height}" '
+        f'role="img" aria-label="{esc(label)} scale">'
+    ]
+    for y, tick_label in ticks:
+        pieces.append(
+            f'<text x="70" y="{y + 4:.1f}" text-anchor="end" '
+            f'class="svg-label">{esc(tick_label)}</text>'
+            f'<line x1="73" y1="{y:.1f}" x2="78" y2="{y:.1f}" class="axis-tick"/>'
+        )
+    pieces.append("</svg>")
+    return "".join(pieces)
+
+
+def frozen_column_chart(axis, plot_svg, legend=""):
+    return (
+        '<div class="frozen-chart">'
+        f'{axis}<div class="chart-scroll">{plot_svg}</div>'
+        f'</div>{legend}'
+    )
+
+
 def svg_sample_read_counts(counts, sample_order, label):
     data = [(sample, counts[sample]) for sample in sample_order if sample in counts]
     if not data:
         return '<p class="small-muted">Read counts were not available.</p>'
-    width = max(760, 110 + len(data) * 54)
+    width = max(690, 40 + len(data) * 54)
     height = 420
-    left, right, top, bottom = 70, 25, 35, 100
+    left, right, top, bottom = 10, 25, 35, 100
     plot_w = width - left - right
     plot_h = height - top - bottom
     max_value = max(value for _, value in data) or 1
     bar_w = min(34, plot_w / max(1, len(data)) * 0.65)
     pieces = [
-        f'<div class="chart-scroll"><svg viewBox="0 0 {width} {height}" '
+        f'<svg class="scroll-chart-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
         f'style="min-width:{width}px" role="img" aria-label="{esc(label)}">'
     ]
+    axis_ticks = []
     for fraction in (0, 0.25, 0.5, 0.75, 1):
         y = top + plot_h * (1 - fraction)
         pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>')
-        pieces.append(
-            f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" class="svg-label">'
-            f'{fmt_count(max_value * fraction)}</text>'
-        )
+        axis_ticks.append((y, fmt_count(max_value * fraction)))
     slot_w = plot_w / len(data)
     for index, (sample, value) in enumerate(data):
         x = left + slot_w * (index + 0.5) - bar_w / 2
@@ -352,14 +414,16 @@ def svg_sample_read_counts(counts, sample_order, label):
         y = top + plot_h - bar_h
         pieces.append(
             f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{bar_h:.1f}" '
-            f'rx="3" fill="#2563eb"><title>{esc(sample)}: {fmt_count(value)}</title></rect>'
+            f'rx="3" fill="#0072B2"><title>{esc(sample)}: {fmt_count(value)}</title></rect>'
         )
         pieces.append(
             f'<text transform="translate({x + bar_w / 2:.1f},{height-bottom+12}) rotate(55)" '
             f'class="svg-label">{esc(sample)}</text>'
         )
-    pieces.append("</svg></div>")
-    return "".join(pieces)
+    pieces.append("</svg>")
+    return frozen_column_chart(
+        frozen_y_axis(axis_ticks, height, label), "".join(pieces)
+    )
 
 
 def flatten_config(config, prefix=""):
@@ -434,18 +498,19 @@ def svg_composition(sample_totals, title):
     categories = [name for name, _ in category_totals.most_common(9)]
     if len(category_totals) > len(categories):
         categories.append("Other")
-    width = max(760, 80 + 42 * len(samples))
+    width = max(690, 30 + 42 * len(samples))
     longest_label = max((len(str(sample)) for sample in samples), default=0)
     label_space = min(145, max(80, longest_label * 6))
     height = 340 + label_space
-    plot_x, plot_y, plot_w, plot_h = 65, 30, width - 100, 300
+    plot_x, plot_y, plot_w, plot_h = 10, 30, width - 30, 300
     bar_w = min(30, plot_w / max(1, len(samples)) * 0.72)
     step = plot_w / max(1, len(samples))
-    pieces = [f'<div class="chart-scroll"><svg viewBox="0 0 {width} {height}" style="min-width:{width}px" role="img" aria-label="{esc(title)}">']
+    pieces = [f'<svg class="scroll-chart-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" style="min-width:{width}px" role="img" aria-label="{esc(title)}">']
+    axis_ticks = []
     for tick in range(0, 101, 25):
         y = plot_y + plot_h * (1 - tick / 100)
         pieces.append(f'<line x1="{plot_x}" y1="{y}" x2="{plot_x + plot_w}" y2="{y}" class="grid"/>')
-        pieces.append(f'<text x="{plot_x - 8}" y="{y + 4}" text-anchor="end" class="svg-label">{tick}%</text>')
+        axis_ticks.append((y, f"{tick}%"))
     for index, sample in enumerate(samples):
         values = sample_totals[sample]
         total = sum(values.values()) or 1
@@ -462,14 +527,19 @@ def svg_composition(sample_totals, title):
                 f'fill="{PALETTE[cat_index % len(PALETTE)]}"><title>{esc(sample)} — {esc(category)}: {100 * value / total:.1f}%</title></rect>'
             )
         pieces.append(f'<text transform="translate({x + bar_w / 2:.1f},{plot_y + plot_h + 10}) rotate(55)" class="svg-label">{esc(sample)}</text>')
-    pieces.append('</svg><div class="chart-legend" aria-label="Domain legend">')
+    pieces.append('</svg>')
+    legend = ['<div class="chart-legend" aria-label="Domain legend">']
     for index, category in enumerate(categories):
-        pieces.append(
+        legend.append(
             f'<span class="legend-item"><span class="legend-swatch" '
             f'style="background:{PALETTE[index % len(PALETTE)]}"></span>{esc(category)}</span>'
         )
-    pieces.append('</div></div>')
-    return "".join(pieces)
+    legend.append('</div>')
+    return frozen_column_chart(
+        frozen_y_axis(axis_ticks, height, title),
+        "".join(pieces),
+        "".join(legend),
+    )
 
 
 def svg_top_taxa(taxa_totals, limit=12):
@@ -483,7 +553,7 @@ def svg_top_taxa(taxa_totals, limit=12):
         y = 24 + index * 42
         bar_w = plot_w * value / max_value
         pieces.append(f'<text x="{left - 12}" y="{y + 21}" text-anchor="end" class="svg-label">{esc(taxon)}</text>')
-        pieces.append(f'<rect x="{left}" y="{y}" width="{bar_w:.1f}" height="28" rx="4" fill="#2563eb"><title>{esc(taxon)}: {fmt_count(value)}</title></rect>')
+        pieces.append(f'<rect x="{left}" y="{y}" width="{bar_w:.1f}" height="28" rx="4" fill="#0072B2"><title>{esc(taxon)}: {fmt_count(value)}</title></rect>')
         pieces.append(f'<text x="{left + bar_w + 8:.1f}" y="{y + 20}" class="svg-total">{fmt_count(value)}</text>')
     pieces.append('</svg>')
     return "".join(pieces)
@@ -556,9 +626,9 @@ def svg_log_series(sample_order, values, series_labels, title):
     ]
     if not positives:
         return '<p class="small-muted">No positive values were available.</p>'
-    width = max(820, 150 + len(sample_order) * 48)
+    width = max(720, 50 + len(sample_order) * 48)
     height = 470
-    left, right, top, bottom = 90, 30, 35, 115
+    left, right, top, bottom = 10, 30, 35, 115
     plot_w, plot_h = width - left - right, height - top - bottom
     low, high = math.log10(min(positives)), math.log10(max(positives))
     if high - low < 0.5:
@@ -569,15 +639,16 @@ def svg_log_series(sample_order, values, series_labels, title):
         for index, label in enumerate(series_labels)
     }
     pieces = [
-        f'<h4>{esc(title)}</h4><div class="chart-scroll"><svg viewBox="0 0 {width} {height}" '
+        f'<svg class="scroll-chart-svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
         f'style="min-width:{width}px" role="img" aria-label="{esc(title)}">'
     ]
+    axis_ticks = []
     for index in range(5):
         fraction = index / 4
         y = top + plot_h * (1 - fraction)
         tick = 10 ** (low + (high - low) * fraction)
         pieces.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>')
-        pieces.append(f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" class="svg-label">{fmt_count(tick)}</text>')
+        axis_ticks.append((y, fmt_axis_value(tick)))
     x_step = plot_w / max(1, len(sample_order))
     for series_index, label in enumerate(series_labels):
         points = []
@@ -605,14 +676,20 @@ def svg_log_series(sample_order, values, series_labels, title):
             f'<text transform="translate({x:.1f},{height-bottom+12}) rotate(55)" '
             f'class="svg-label">{esc(sample)}</text>'
         )
-    pieces.append('</svg></div><div class="chart-legend">')
+    pieces.append('</svg>')
+    legend = ['<div class="chart-legend">']
     for label in series_labels:
-        pieces.append(
+        legend.append(
             f'<span class="legend-item"><span class="legend-swatch" '
             f'style="background:{colours[label]}"></span>{esc(label)}</span>'
         )
-    pieces.append("</div>")
-    return "".join(pieces)
+    legend.append("</div>")
+    chart = frozen_column_chart(
+        frozen_y_axis(axis_ticks, height, title),
+        "".join(pieces),
+        "".join(legend),
+    )
+    return f'<h4>{esc(title)}</h4>{chart}'
 
 
 def internal_standard_html(config, corrected_rows):
@@ -819,6 +896,20 @@ def dada2_loss_cells(stats, paired):
     )
 
 
+def pre_dada2_loss_cells(raw, retained, split_counts):
+    split_counts = split_counts or {}
+    assigned = split_counts.get("total")
+    return (
+        f"<td>{fmt_count(raw)}</td>"
+        f"<td>{fmt_loss(raw, retained)}</td>"
+        f"<td>{fmt_count(retained)}</td>"
+        f"<td>{fmt_loss(retained, assigned)}</td>"
+        f"<td>{fmt_count(split_counts.get('prok'))}</td>"
+        f"<td>{fmt_count(split_counts.get('euk'))}</td>"
+        f"<td>{fmt_count(assigned)}</td>"
+    )
+
+
 def render_report(config, paths, output_path):
     sample_rows = read_tsv(paths["samples"])
     sample_names = [first_value(row, ["sample", "sample-id", "sampleid"]) for row in sample_rows]
@@ -835,7 +926,12 @@ def render_report(config, paths, output_path):
 
     stats16 = parse_dada2_stats(paths["stats16s"])
     stats18 = parse_dada2_stats(paths["stats18s"])
-    raw_read_pairs = parse_cutadapt_qc(paths.get("cutadapt_qc", []))
+    cutadapt_processing = parse_cutadapt_processing(paths.get("cutadapt_qc", []))
+    raw_read_pairs = {
+        sample: values["raw"]
+        for sample, values in cutadapt_processing.items()
+        if values["raw"] is not None
+    }
     aggregate16 = aggregate_dada2_stats(stats16)
     aggregate18 = aggregate_dada2_stats(stats18)
 
@@ -920,6 +1016,36 @@ def render_report(config, paths, output_path):
         f"<tr><td>18S concatenated</td>{dada2_loss_cells(aggregate18, paired=False)}</tr>"
     )
 
+    pre_dada2_rows = []
+    for sample in all_chart_samples:
+        processing = cutadapt_processing.get(sample, {})
+        if not processing and sample not in split:
+            continue
+        pre_dada2_rows.append(
+            f"<tr><td>{esc(sample)}</td>"
+            f"{pre_dada2_loss_cells(processing.get('raw'), processing.get('retained'), split.get(sample))}</tr>"
+        )
+    aggregate_raw_values = [
+        values["raw"] for values in cutadapt_processing.values()
+        if values["raw"] is not None
+    ]
+    aggregate_raw = sum(aggregate_raw_values) if aggregate_raw_values else None
+    aggregate_retained_values = [
+        values["retained"] for values in cutadapt_processing.values()
+        if values["retained"] is not None
+    ]
+    aggregate_retained = (
+        sum(aggregate_retained_values) if aggregate_retained_values else None
+    )
+    aggregate_split = {
+        key: sum(values[key] for values in split.values())
+        for key in ("prok", "euk", "total")
+    }
+    pre_dada2_summary_row = (
+        "<tr><th>All samples</th>"
+        f"{pre_dada2_loss_cells(aggregate_raw, aggregate_retained, aggregate_split)}</tr>"
+    )
+
     parameter_rows = "".join(
         f"<tr><th>{esc(key)}</th><td><code>{esc(value)}</code></td></tr>"
         for key, value in flatten_config(config)
@@ -994,10 +1120,10 @@ main{{max-width:1180px;margin:28px auto 70px;padding:0 22px}} section{{backgroun
 h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:var(--blue);font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}}
 .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:24px 0}} .card{{border:1px solid var(--line);border-radius:12px;padding:18px;background:#fbfcfe}} .card strong{{display:block;font-size:28px;line-height:1.2}} .card span{{color:var(--muted);font-size:13px}}
 .table-wrap{{overflow:auto;border:1px solid var(--line);border-radius:10px}} table{{width:100%;border-collapse:collapse;white-space:nowrap}} th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}} thead th{{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.04em}} tbody tr:last-child td,tbody tr:last-child th{{border-bottom:0}}
-.pill{{display:inline-block;padding:3px 8px;border-radius:99px;font-size:12px;font-weight:750}} .pill.good{{background:#dcfce7;color:#166534}} .pill.warn{{background:#fef3c7;color:#92400e}} .pill.bad{{background:#fee2e2;color:#991b1b}} .pill.neutral{{background:#e2e8f0;color:#475569}}
-.svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} svg{{max-width:100%;height:auto}} .chart-scroll{{overflow-x:auto}}
+.pill{{display:inline-block;padding:3px 8px;border-radius:99px;font-size:12px;font-weight:750}} .pill.good{{background:#dbeafe;color:#1e40af}} .pill.warn{{background:#fef3c7;color:#92400e}} .pill.bad{{background:#fce7f3;color:#9d174d}} .pill.neutral{{background:#e2e8f0;color:#475569}}
+.svg-label{{fill:#475467;font-size:12px}} .svg-total{{fill:#344054;font-size:12px;font-weight:700}} .grid{{stroke:#e4e7ec;stroke-width:1}} .axis-tick{{stroke:#94a3b8;stroke-width:1}} svg{{max-width:100%;height:auto}} .frozen-chart{{display:grid;grid-template-columns:78px minmax(0,1fr);align-items:start;margin:18px 0;border:1px solid var(--line);border-radius:10px;background:white;overflow:hidden}} .frozen-y-axis{{display:block;max-width:none;background:white;border-right:1px solid var(--line);z-index:1}} .chart-scroll{{overflow-x:auto;min-width:0}} .scroll-chart-svg{{display:block;max-width:none;height:auto}}
 .chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
-.explorer-controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:22px 0 12px}} .explorer-control label{{display:block;margin-bottom:5px;color:#344054;font-size:13px;font-weight:750}} .explorer-control select{{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:var(--ink);font:inherit}} .explorer-control select:disabled{{background:#f1f5f9;color:#94a3b8}} .small-muted{{color:var(--muted);font-size:13px}} .taxonomy-chart{{overflow-x:auto;margin:20px 0 8px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(to top,#f8fafc 1px,transparent 1px);background-size:100% 25%;padding:20px 18px}} .taxonomy-stacked-plot{{display:flex;align-items:flex-start;gap:5px;height:410px;min-width:max-content}} .taxonomy-sample-column{{position:relative;display:flex;flex-direction:column;justify-content:flex-start;width:34px;height:400px}} .taxonomy-stacked-bar{{display:flex;flex:none;flex-direction:column-reverse;width:100%;height:300px;background:#eef2f6;border-bottom:1px solid #94a3b8}} .taxonomy-segment{{width:100%;min-height:1px}} .taxonomy-sample-label{{position:absolute;top:308px;left:16px;width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transform:rotate(55deg);transform-origin:left top;color:#475467;font-size:11px}} #taxonomy-explorer-legend{{margin:8px 0 24px;min-width:0;padding-left:0}}
+.explorer-controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:22px 0 12px}} .explorer-control label{{display:block;margin-bottom:5px;color:#344054;font-size:13px;font-weight:750}} .explorer-control select{{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:var(--ink);font:inherit}} .explorer-control select:disabled{{background:#f1f5f9;color:#94a3b8}} .small-muted{{color:var(--muted);font-size:13px}} .taxonomy-chart{{display:grid;grid-template-columns:54px minmax(0,1fr);margin:20px 0 8px;border:1px solid var(--line);border-radius:10px;background:white;overflow:hidden}} .taxonomy-y-axis{{position:relative;height:450px;border-right:1px solid var(--line);background:white;z-index:1}} .taxonomy-y-axis span{{position:absolute;right:8px;transform:translateY(-50%);color:#475467;font-size:12px}} .taxonomy-scroll{{overflow-x:auto;min-width:0;padding:20px 18px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 74px,#e4e7ec 75px)}} .taxonomy-stacked-plot{{display:flex;align-items:flex-start;gap:5px;height:410px;min-width:max-content}} .taxonomy-sample-column{{position:relative;display:flex;flex-direction:column;justify-content:flex-start;width:34px;height:400px}} .taxonomy-stacked-bar{{display:flex;flex:none;flex-direction:column-reverse;width:100%;height:300px;background:#eef2f6;border-bottom:1px solid #94a3b8}} .taxonomy-segment{{width:100%;min-height:1px}} .taxonomy-sample-label{{position:absolute;top:308px;left:16px;width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transform:rotate(55deg);transform-origin:left top;color:#475467;font-size:11px}} #taxonomy-explorer-legend{{margin:8px 0 24px;min-width:0;padding-left:0}}
 .figure-scroll{{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px;background:white}} .report-figure{{display:block;max-width:none;height:auto;margin:0}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
 details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0 14px 14px}} summary{{cursor:pointer;font-weight:750;padding:14px 0}}
 @media(max-width:650px){{.taxonomy-sample-column{{width:30px}}}}
@@ -1010,7 +1136,7 @@ details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
-<section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
+<section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy bar plot</h2><p>This QIIME 2-style view shows each sample as a 100% stacked bar. Choose a taxonomy level, then order the bars by SampleID, Condition, Latitude, Longitude, or Depth. When a metadata variable is selected, you can optionally display only one value. Counts use <code>{esc(abundance_column)}</code>; hover over a colored segment for its taxon, relative abundance, and count.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div><div class="explorer-control"><label for="taxonomy-plot-field">Plot samples by</label><select id="taxonomy-plot-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Filter plotted value</label><select id="taxonomy-metadata-value"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Interactive relative taxonomic abundance by sample"></div><div id="taxonomy-explorer-legend" class="chart-legend" aria-label="Taxonomy legend"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive controls require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
 {internal_section}

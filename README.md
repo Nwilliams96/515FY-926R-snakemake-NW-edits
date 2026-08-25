@@ -124,11 +124,13 @@ The final workflow target creates a self-contained report at:
 results/07-report/<studyName>.pipeline-report.html
 ```
 
-The report summarizes the configuration, raw read pairs per sample, reads
-retained per sample after DADA2, stage-specific read loss, sample-level quality
-control, domain composition, 16S/18S/chloroplast/mitochondrial assignments,
-unassigned sequences, abundant taxa, and—when enabled—the
-internal-standard results and figures.
+The report summarizes the configuration, raw read pairs per sample, primer
+trimming and BBsplit assignment loss, reads retained per sample after DADA2,
+stage-specific DADA2 loss, sample-level quality control, domain composition,
+16S/18S/chloroplast/mitochondrial assignments, unassigned sequences, abundant
+taxa, and—when enabled—the internal-standard results and figures. Horizontally
+scrollable sample figures keep their y-axis scale visible, and report palettes
+are chosen for colour-vision accessibility.
 
 The taxonomy explorer provides a QIIME 2-style, 100%-stacked taxonomic bar plot
 with one bar per sample. It can order and filter plotted samples by SampleID,

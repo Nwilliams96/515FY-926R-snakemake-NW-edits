@@ -61,7 +61,8 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "S_1.qc.txt").write_text(
-                "Total read pairs processed:              1,250\n",
+                "Total read pairs processed:              1,250\n"
+                "Pairs written (passing filters):          1,100 (88.0%)\n",
                 encoding="utf-8",
             )
             (root / "long.tsv").write_text(
@@ -119,6 +120,10 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Chimera-removal loss", rendered)
             self.assertIn("Reads before filtering and quality control", rendered)
             self.assertIn("S-1: 1,250", rendered)
+            self.assertIn("Primer trimming and BBsplit assignment", rendered)
+            self.assertIn("BBsplit unassigned", rendered)
+            self.assertIn("150 (12.0%)", rendered)
+            self.assertIn("100 (9.1%)", rendered)
             self.assertIn("Reads retained after DADA2", rendered)
             self.assertIn("S-1: 800", rendered)
             self.assertIn("Not applicable", rendered)
@@ -129,6 +134,9 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn('id="taxonomy-rank"', rendered)
             self.assertIn("justify-content:flex-start", rendered)
             self.assertIn("top:308px", rendered)
+            self.assertIn('class="frozen-y-axis"', rendered)
+            self.assertIn('axis.className = "taxonomy-y-axis"', rendered)
+            self.assertIn("#332288", rendered)
             self.assertIn(
                 '"metadataFields":["SampleID","Condition","Latitude","Longitude","Depth"]',
                 rendered,

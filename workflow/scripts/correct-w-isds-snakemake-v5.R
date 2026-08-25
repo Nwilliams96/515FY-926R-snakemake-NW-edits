@@ -264,6 +264,16 @@ means_df <- plot_data %>%
   filter(ratio_column == "recovery_mean") %>%
   distinct(SampleID, Recovery)
 
+colourblind_palette <- c(
+  "#332288", "#88CCEE", "#44AA99", "#117733", "#999933",
+  "#DDCC77", "#CC6677", "#882255", "#AA4499", "#0072B2",
+  "#E69F00", "#009E73", "#D55E00", "#56B4E9", "#64748B"
+)
+method_colours <- setNames(
+  rep(colourblind_palette, length.out = nrow(method_specs)),
+  method_specs$label
+)
+
 plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
   geom_point(position = position_jitter(width = 0.15, height = 0), size = 2.5) +
   geom_line(
@@ -275,7 +285,7 @@ plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
   ) +
   theme_minimal() +
   scale_y_log10() +
-  scale_colour_discrete(name = "Correction method") +
+  scale_colour_manual(values = method_colours, name = "Correction method") +
   labs(
     title = "Recovery Ratios per Sample",
     subtitle = paste0(
@@ -339,10 +349,10 @@ plot2 <- ggplot(
   facet_wrap(~Method, ncol = 1) +
   theme_minimal() +
   scale_colour_manual(values = c(
-    "Bacteria" = "#1F77B4",
-    "Archaea" = "#2CA02C",
-    "Eukaryota" = "#D62728",
-    "Unassigned" = "#7F7F7F"
+    "Bacteria" = "#0072B2",
+    "Archaea" = "#E69F00",
+    "Eukaryota" = "#009E73",
+    "Unassigned" = "#64748B"
   )) +
   labs(
     title = "Total Copies per Unit by Domain and Correction Method",
