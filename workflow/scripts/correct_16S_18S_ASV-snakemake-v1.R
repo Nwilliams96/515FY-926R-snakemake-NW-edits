@@ -172,16 +172,19 @@ combined_asv_corrected_dada2 <- combined_asv_long_corrected_dada2 %>%
 combined_asv_no_correction <- combined_asv_long_no_correction %>%
   pivot_wider(names_from = SampleID, values_from = read_abundance, values_fill = 0)
 
-ProPortal_Assigned_Cyanobacteria <- read_tsv(snakemake@input[["proportalclassification"]], col_names = FALSE)
-colnames(ProPortal_Assigned_Cyanobacteria) <- c("ASV_hash", "ProPortal_ASV_Ecotype")
+ProPortal_Assigned_Cyanobacteria <- read_tsv(
+  snakemake@input[["proportalclassification"]],
+  col_names = c("ASV_hash", "ProPortal_ASV_Ecotype"),
+  show_col_types = FALSE
+)
 
-combined_asv_corrected <- combined_asv_corrected %>% left_join(ProPortal_Assigned_Cyanobacteria) %>%
+combined_asv_corrected <- combined_asv_corrected %>% left_join(ProPortal_Assigned_Cyanobacteria, by = "ASV_hash") %>%
   select(1:2, ProPortal_ASV_Ecotype, everything())
 
-combined_asv_corrected_dada2 <- combined_asv_corrected_dada2 %>% left_join(ProPortal_Assigned_Cyanobacteria) %>%
+combined_asv_corrected_dada2 <- combined_asv_corrected_dada2 %>% left_join(ProPortal_Assigned_Cyanobacteria, by = "ASV_hash") %>%
   select(1:2, ProPortal_ASV_Ecotype, everything())
 
-combined_asv_no_correction <- combined_asv_no_correction %>% left_join(ProPortal_Assigned_Cyanobacteria) %>%
+combined_asv_no_correction <- combined_asv_no_correction %>% left_join(ProPortal_Assigned_Cyanobacteria, by = "ASV_hash") %>%
   select(1:2, ProPortal_ASV_Ecotype, everything())
 
 #Write out file
