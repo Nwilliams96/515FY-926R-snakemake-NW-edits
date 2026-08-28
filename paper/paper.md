@@ -46,7 +46,7 @@ While sequencing both 16S and 18S amplicons in the same sequencing run is extrem
 
 # State of the field                                                                                                                  
 
-Currently there exist many pipelines that make processing amplicon data easy. These include NextFlow (ref), Galaxy (ref) to name a few. These pipelines often include a combination of QIIME2 and dada2 to merge, denoise and to remove chimeras from the amplicon data. They then assign taxonomy often using either SILVA (ref) or PR2 (ref).
+Currently there exist many pipelines that make processing amplicon data easy. These include Nextflow [@ditommaso2017] and Galaxy [@afgan2018], to name a few. These pipelines often include a combination of QIIME 2 [@bolyen2019] and DADA2 [@callahan2016] to merge, denoise and to remove chimeras from the amplicon data. They then assign taxonomy often using either SILVA [@quast2013] or PR2 [@guillou2013].
 
 # Software design
 
@@ -118,7 +118,7 @@ $$
 
 where $A_{\mathrm{read}}$ is the observed read abundance and $CF_d$ is the correction factor for the corresponding 16S or 18S sequence type. This correction has been validated by comparing a selection of samples from GRUMP that had vastly different correction factors, and re-sequencing them in their own pool, calculating their new correction factor (this bias occurs based on the contents of the pool and the individual sequencing run), which showed strikingly similar results (\autoref{fig:corrections}).
 
-![Comparisons of different correction factors. A--C are regressions comparing flow cytometry of *Synechococcus* to amplicons in copies/L calculated from the raw data, after correction for sequence losses during the DADA2 step, and after both DADA2 loss correction and 18S bias correction. D--E compare an original set of GRUMP samples with the same samples after re-amplification, pooling, and recalculation of correction factors.\label{fig:corrections}](figures/figure2-corrections.png){width="85%"}
+![Comparisons of different correction factors. A--C are regressions comparing flow cytometry of *Synechococcus* to amplicons in copies/L calculated from the raw data, after correction for sequence losses during the DADA2 step, and after both DADA2 loss correction and 18S bias correction. D--E compare an original set of GRUMP samples with the same samples after re-amplification, pooling, and recalculation of correction factors.\label{fig:corrections}](figures/figure2-corrections.pdf){width="85%"}
 
 ## Internal Standard Correction
 
