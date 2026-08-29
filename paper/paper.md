@@ -118,7 +118,7 @@ $$
 
 where $A_{\mathrm{read}}$ is the observed read abundance and $CF_d$ is the correction factor for the corresponding 16S or 18S sequence type. This correction has been validated by comparing a selection of samples from GRUMP that had vastly different correction factors, and re-sequencing them in their own pool, calculating their new correction factor (this bias occurs based on the contents of the pool and the individual sequencing run), which showed strikingly similar results (\autoref{fig:corrections}).
 
-![Comparisons of different correction factors. A--C are regressions comparing flow cytometry of *Synechococcus* to amplicons in copies/L calculated from the raw data, after correction for sequence losses during the DADA2 step, and after both DADA2 loss correction and 18S bias correction. D--E compare an original set of GRUMP samples with the same samples after re-amplification, pooling, and recalculation of correction factors.\label{fig:corrections}](figures/figure2-corrections.pdf){width="85%"}
+![Comparisons of different correction factors. A--C are regressions comparing flow cytometry of *Synechococcus* to amplicons in copies/L calculated from the raw data, after correction for sequence losses during the DADA2 step, and after both DADA2 loss correction and 18S bias correction. D--E compare an original set of GRUMP samples with the same samples after re-amplification, pooling, and recalculation of correction factors.\label{fig:corrections}](figures/figure2-corrections.png){width="85%"}
 
 ## Internal Standard Correction
 
