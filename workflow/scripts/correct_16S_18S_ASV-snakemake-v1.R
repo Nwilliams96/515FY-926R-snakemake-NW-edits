@@ -108,6 +108,20 @@ starting_frac_18S <- Concentration_18S / (Concentration_16S + Concentration_18S)
 correction_factor_16S = starting_frac_16S / PROK_frac
 correction_factor_18S = starting_frac_18S / EUK_frac
 
+# Save the exact values applied below so the final report records analysis
+# provenance without independently recreating this calculation.
+write_tsv(
+  tibble(
+    path = c("16S", "18S"),
+    amplicon_amount_pM = c(Concentration_16S, Concentration_18S),
+    starting_molar_fraction = c(starting_frac_16S, starting_frac_18S),
+    bbsplit_assigned_reads = c(PROK_reads, EUK_reads),
+    observed_read_fraction = c(PROK_frac, EUK_frac),
+    correction_factor = c(correction_factor_16S, correction_factor_18S)
+  ),
+  snakemake@output[["correction_factors"]]
+)
+
 #Import .16S.all-16S-seqs.with-tax.tsv
 
 #1. Calculate percent of reads that passed DADA2 denoising for both proks and euks

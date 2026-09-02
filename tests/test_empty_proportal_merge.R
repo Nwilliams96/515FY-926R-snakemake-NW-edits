@@ -66,7 +66,8 @@ snakemake <- new(
   output = list(
     mergedtabledada218Scorrected = file.path(root, "merged-corrected.tsv"),
     mergedtabledada2 = file.path(root, "merged-dada2.tsv"),
-    mergedtableuncorrected = file.path(root, "merged-uncorrected.tsv")
+    mergedtableuncorrected = file.path(root, "merged-uncorrected.tsv"),
+    correction_factors = file.path(root, "correction-factors.tsv")
   )
 )
 
@@ -74,10 +75,19 @@ suppressMessages(source(script_path, local = globalenv()))
 
 for (output_path in unname(snakemake@output)) {
   stopifnot(file.exists(output_path))
+  if (identical(output_path, snakemake@output[["correction_factors"]])) next
   merged <- read_tsv(output_path, show_col_types = FALSE)
   stopifnot("ProPortal_ASV_Ecotype" %in% names(merged))
   stopifnot(all(is.na(merged$ProPortal_ASV_Ecotype)))
   stopifnot(setequal(merged$ASV_hash, c("prok-asv", "euk-asv")))
 }
+
+factors <- read_tsv(
+  snakemake@output[["correction_factors"]],
+  col_types = cols(path = col_character()),
+  show_col_types = FALSE
+)
+stopifnot(identical(factors$path, c("16S", "18S")))
+stopifnot(all.equal(factors$correction_factor, c(0.75, 1.5)))
 
 cat("Empty ProPortal merge test passed\n")

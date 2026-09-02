@@ -42,6 +42,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("prok_and_euk_SSU_amplicon_molarities.tsv", common)
         self.assertIn("LEGACY_AMPLICON_CONCENTRATIONS_FILE", common)
         self.assertIn("amplicon_concentrations=AMPLICON_CONCENTRATIONS_FILE", merge_rule)
+        self.assertIn("correction_factors=", merge_rule)
         self.assertIn('f"{standard_id}_recovery_ratio"', common)
         self.assertIn('f"mean_{first}_and_{second}_recovery_ratio"', common)
         self.assertIn("corrected=ISD_CORRECTED_LONG_TABLE", correction_rule)

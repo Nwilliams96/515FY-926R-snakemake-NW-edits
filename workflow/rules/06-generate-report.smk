@@ -14,6 +14,7 @@ rule generate_pipeline_report:
         split_summary="results/" + config["studyName"] + ".eukfrac-per-sample.tsv",
         stats16s="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_stats.tsv",
         stats18s="results/02-euks/09-DADA2d-plaintext-exports/" + config["studyName"] + ".18S.latest_stats.tsv",
+        correction_factors=rules.merge_prok_euk.output.correction_factors,
         cutadapt_qc=expand(
             "results/00-trimmed/{sample}.qc.txt", sample=samples["sample"]
         ),

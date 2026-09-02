@@ -266,6 +266,11 @@ def fmt_axis_value(value):
     return f"{parsed:.3g}"
 
 
+def fmt_decimal(value):
+    parsed = number(value)
+    return "—" if parsed is None else f"{parsed:.6g}"
+
+
 def fmt_loss(before, after):
     if before is None or after is None:
         return "—"
@@ -914,6 +919,29 @@ def pre_dada2_loss_cells(raw, retained, split_counts):
     )
 
 
+def correction_factor_table(rows):
+    if not rows:
+        return '<p class="small-muted">16S/18S correction factors were not available.</p>'
+    body = []
+    for row in rows:
+        body.append(
+            f"<tr><th>{esc(row.get('path'))}</th>"
+            f"<td>{fmt_decimal(row.get('amplicon_amount_pM'))}</td>"
+            f"<td>{fmt_percent(number(row.get('starting_molar_fraction')))}</td>"
+            f"<td>{fmt_count(row.get('bbsplit_assigned_reads'))}</td>"
+            f"<td>{fmt_percent(number(row.get('observed_read_fraction')))}</td>"
+            f"<td><strong>{fmt_decimal(row.get('correction_factor'))}</strong></td></tr>"
+        )
+    return (
+        '<div class="table-wrap"><table><thead><tr><th>Path</th>'
+        '<th>Amplicon amount (pM)</th><th>Starting molar fraction</th>'
+        '<th>BBsplit-assigned reads</th><th>Observed read fraction</th>'
+        '<th>Correction factor used</th></tr></thead><tbody>'
+        + "".join(body)
+        + "</tbody></table></div>"
+    )
+
+
 def render_report(config, paths, output_path):
     sample_rows = read_tsv(paths["samples"])
     sample_names = [first_value(row, ["sample", "sample-id", "sampleid"]) for row in sample_rows]
@@ -938,6 +966,12 @@ def render_report(config, paths, output_path):
     }
     aggregate16 = aggregate_dada2_stats(stats16)
     aggregate18 = aggregate_dada2_stats(stats18)
+    correction_factor_rows = (
+        read_tsv(paths["correction_factors"])
+        if paths.get("correction_factors") and Path(paths["correction_factors"]).is_file()
+        else []
+    )
+    correction_factors_html = correction_factor_table(correction_factor_rows)
 
     internal_table_paths = [
         path for path in paths.get("internal_standard_table", []) if Path(path).is_file()
@@ -1150,7 +1184,7 @@ details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
-<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
+<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy bar plot</h2><p>This QIIME 2-style view shows each sample as a 100% stacked bar. Choose a taxonomy level, then order the bars by SampleID, Condition, Latitude, Longitude, or Depth. When a metadata variable is selected, you can optionally display only one value. Counts use <code>{esc(abundance_column)}</code>; hover over a colored segment for its taxon, relative abundance, and count.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div><div class="explorer-control"><label for="taxonomy-plot-field">Plot samples by</label><select id="taxonomy-plot-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Filter plotted value</label><select id="taxonomy-metadata-value"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Interactive relative taxonomic abundance by sample"></div><div id="taxonomy-explorer-legend" class="chart-legend" aria-label="Taxonomy legend"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive controls require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
@@ -1167,6 +1201,7 @@ def run_from_snakemake(snakemake_object):
         "split_summary": str(snakemake_object.input.split_summary),
         "stats16s": str(snakemake_object.input.stats16s),
         "stats18s": str(snakemake_object.input.stats18s),
+        "correction_factors": str(snakemake_object.input.correction_factors),
         "cutadapt_qc": list(snakemake_object.input.cutadapt_qc),
         "long_data": str(snakemake_object.input.long_data),
         "internal_standard_figures": list(

@@ -69,6 +69,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 stats.format(input=300, filtered=250, denoised=220, merged="", final=200),
                 encoding="utf-8",
             )
+            (root / "correction-factors.tsv").write_text(
+                "path\tamplicon_amount_pM\tstarting_molar_fraction\t"
+                "bbsplit_assigned_reads\tobserved_read_fraction\tcorrection_factor\n"
+                "16S\t1000\t0.5\t700\t0.7\t0.7142857143\n"
+                "18S\t1000\t0.5\t300\t0.3\t1.666666667\n",
+                encoding="utf-8",
+            )
             (root / "S_1.qc.txt").write_text(
                 "Total read pairs processed:              1,250\n"
                 "Pairs written (passing filters):          1,100 (88.0%)\n",
@@ -117,6 +124,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "split_summary": root / "split.tsv",
                     "stats16s": root / "16.tsv",
                     "stats18s": root / "18.tsv",
+                    "correction_factors": root / "correction-factors.tsv",
                     "cutadapt_qc": [root / "S_1.qc.txt"],
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
@@ -168,6 +176,10 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertNotIn("A-ISD", rendered)
             self.assertIn("trunclens.truncR1", rendered)
             self.assertIn("Effective DADA2 settings used", rendered)
+            self.assertIn("16S and 18S correction factors", rendered)
+            self.assertIn("Correction factor used", rendered)
+            self.assertIn("0.714286", rendered)
+            self.assertIn("1.66667", rendered)
             self.assertIn("max_ee_f", rendered)
             self.assertIn("Maximum expected errors in a forward read", rendered)
             self.assertIn("<code>3.5</code>", rendered)

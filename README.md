@@ -128,7 +128,8 @@ The report summarizes the configuration, raw read pairs per sample, primer
 trimming and BBsplit assignment loss, reads retained per sample after DADA2,
 stage-specific DADA2 loss, sample-level quality control, domain composition,
 16S/18S/chloroplast/mitochondrial assignments, unassigned sequences, abundant
-taxa, and—when enabled—the internal-standard results and figures. Horizontally
+taxa, the exact 16S and 18S molarity/read correction factors used during
+merging, and—when enabled—the internal-standard results and figures. Horizontally
 scrollable sample figures keep their y-axis scale visible, and report palettes
 are chosen for colour-vision accessibility.
 

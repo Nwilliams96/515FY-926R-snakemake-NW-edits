@@ -10,7 +10,8 @@ rule merge_prok_euk:
     output:
         mergedtableuncorrected="results/03-merged/" + config["studyName"] + ".merged_uncorrected.tsv",
         mergedtabledada2="results/03-merged/" + config["studyName"] + ".merged_dada2_corrected.tsv",
-        mergedtabledada218Scorrected="results/03-merged/" + config["studyName"] + ".merged_dada2_18S_corrected.tsv"
+        mergedtabledada218Scorrected="results/03-merged/" + config["studyName"] + ".merged_dada2_18S_corrected.tsv",
+        correction_factors="results/03-merged/" + config["studyName"] + ".16S_18S_correction_factors.tsv"
     conda:
         "../envs/r-tidyverse-2.0.0.yml"
     log:
