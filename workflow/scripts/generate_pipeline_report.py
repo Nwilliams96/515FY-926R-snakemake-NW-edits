@@ -634,6 +634,10 @@ def svg_log_series(sample_order, values, series_labels, title):
     if high - low < 0.5:
         low -= 0.25
         high += 0.25
+    else:
+        log_span = high - low
+        low -= max(0.25, log_span * 0.15)
+        high += log_span * 0.05
     colours = {
         label: PALETTE[index % len(PALETTE)]
         for index, label in enumerate(series_labels)
@@ -935,7 +939,21 @@ def render_report(config, paths, output_path):
     aggregate16 = aggregate_dada2_stats(stats16)
     aggregate18 = aggregate_dada2_stats(stats18)
 
+    internal_table_paths = [
+        path for path in paths.get("internal_standard_table", []) if Path(path).is_file()
+    ]
+    corrected_internal_rows = (
+        read_tsv(internal_table_paths[0]) if internal_table_paths else []
+    )
     long_rows = read_tsv(paths["long_data"])
+    # The corrected table intentionally excludes every detected ISD ASV. Use
+    # its ASV set as a second line of defence for reports made from an older,
+    # unfiltered formatted table.
+    retained_asvs = {
+        row.get("ASV_hash") for row in corrected_internal_rows if row.get("ASV_hash")
+    }
+    if retained_asvs:
+        long_rows = [row for row in long_rows if row.get("ASV_hash") in retained_asvs]
     abundance_column = "Corrected_Sequence_Counts"
     if long_rows and abundance_column not in long_rows[0]:
         abundance_column = "Raw_Sequence_Counts"
@@ -1083,11 +1101,8 @@ def render_report(config, paths, output_path):
         for category, value in assignment_summary
     )
     internal_paths = [path for path in paths.get("internal_standard_figures", []) if Path(path).is_file()]
-    internal_table_paths = [
-        path for path in paths.get("internal_standard_table", []) if Path(path).is_file()
-    ]
     interactive_internal = internal_standard_html(
-        config, read_tsv(internal_table_paths[0]) if internal_table_paths else []
+        config, corrected_internal_rows
     )
     internal_section = ""
     if interactive_internal or internal_paths:

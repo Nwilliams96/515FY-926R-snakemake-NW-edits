@@ -35,6 +35,15 @@ class GeneratePipelineReportTests(unittest.TestCase):
         self.assertNotIn(">nan<", chart.lower())
         self.assertNotIn(">inf<", chart.lower())
 
+    def test_log_axis_extends_below_smallest_positive_value(self):
+        chart = REPORT.svg_log_series(
+            ["S-1", "S-2"],
+            {"S-1": {"Archaea": 100}, "S-2": {"Archaea": 10000}},
+            ["Archaea"],
+            "Absolute Archaea",
+        )
+        self.assertIn(">50.1</text>", chart)
+
     def test_renders_summary_and_optional_figure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -72,7 +81,8 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "S-1\tEukaryota\t\tDinoflagellata\t\tEukaryote_18S\tno\tA2\t200\n"
                 "S-1\tEukaryota\t\tChloroplastida\t\tChloroplast_16S\tyes\tA3\t100\n"
                 "S-1\tEukaryota\t\t\tMitochondria\tEukaryote_18S\tno\tA4\t50\n"
-                "S-1\tUnassigned\t\t\t\tUnassigned\tno\tA5\t25\n",
+                "S-1\tUnassigned\t\t\t\tUnassigned\tno\tA5\t25\n"
+                "S-1\tBacteria\tInternal-standard\t\t\tProkaryotic_16S\tno\tA-ISD\t1000\n",
                 encoding="utf-8",
             )
             # A tiny valid PNG is sufficient to verify base64 embedding.
@@ -82,10 +92,13 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
             )
             (root / "corrected.tsv").write_text(
-                "SampleID\tDomain\tisd_1_recovery_ratio\trecovery_mean\t"
+                "SampleID\tASV_hash\tDomain\tisd_1_recovery_ratio\trecovery_mean\t"
                 "Copies_BP_recovery_ratio\n"
-                "S-1\tBacteria\t0.25\t0.25\t2400\n"
-                "S-1\tEukaryota\t0.25\t0.25\t800\n",
+                "S-1\tA1\tBacteria\t0.25\t0.25\t2400\n"
+                "S-1\tA2\tEukaryota\t0.25\t0.25\t400\n"
+                "S-1\tA3\tEukaryota\t0.25\t0.25\t200\n"
+                "S-1\tA4\tEukaryota\t0.25\t0.25\t100\n"
+                "S-1\tA5\tUnassigned\t0.25\t0.25\t100\n",
                 encoding="utf-8",
             )
             output = root / "report.html"
@@ -152,6 +165,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Recovery ratios by sample (log10 scale)", rendered)
             self.assertIn("Domain abundance by correction method", rendered)
             self.assertIn("S-1 — BP: 0.25", rendered)
+            self.assertNotIn("A-ISD", rendered)
             self.assertIn("trunclens.truncR1", rendered)
             self.assertIn("Effective DADA2 settings used", rendered)
             self.assertIn("max_ee_f", rendered)

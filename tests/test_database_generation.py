@@ -45,6 +45,9 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn('f"{standard_id}_recovery_ratio"', common)
         self.assertIn('f"mean_{first}_and_{second}_recovery_ratio"', common)
         self.assertIn("corrected=ISD_CORRECTED_LONG_TABLE", correction_rule)
+        self.assertIn("filtered=ISD_FILTERED_LONG_TABLE", correction_rule)
+        self.assertIn("RESULTS_LONG_DATA = (", common)
+        self.assertIn("ISD_FILTERED_LONG_TABLE", common)
 
     def test_reformats_pr2_fasta_without_appending_stale_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:

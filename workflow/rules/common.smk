@@ -85,6 +85,11 @@ ISD_CORRECTED_LONG_TABLE = (
     + ALL_INTERNAL_STANDARD_IDS_STEM
     + ".ISD_corrected_long_data.tsv"
 )
+ISD_FILTERED_LONG_TABLE = (
+    "results/05-internal-std-corrected/"
+    + config["studyName"]
+    + ".ISD_removed_long_data.tsv"
+)
 INTERNAL_STANDARD_METHOD_STEMS = (
     [f"{standard_id}_recovery_ratio" for standard_id in INTERNAL_STANDARD_IDS]
     + [
@@ -169,8 +174,13 @@ if not re.fullmatch(r"[A-Za-z0-9._-]+", PROJECT_NAME):
         "and hyphens"
     )
 RESULTS_EXPORT_DIR = PROJECT_NAME + "-Results-Export"
+RESULTS_LONG_DATA = (
+    ISD_FILTERED_LONG_TABLE
+    if USE_INTERNAL_STANDARDS
+    else "results/04-formatted/" + config["studyName"] + ".long_data.tsv"
+)
 RESULTS_EXPORT_INPUTS = [
-    "results/04-formatted/" + config["studyName"] + ".long_data.tsv",
+    RESULTS_LONG_DATA,
     "results/04-formatted/" + config["studyName"] + ".asv_sequences.tsv",
     "results/07-report/" + config["studyName"] + ".pipeline-report.html",
 ]

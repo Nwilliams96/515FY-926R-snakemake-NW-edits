@@ -69,6 +69,7 @@ if USE_INTERNAL_STANDARDS:
             method_stems=INTERNAL_STANDARD_METHOD_STEMS
         output:
             corrected=ISD_CORRECTED_LONG_TABLE,
+            filtered=ISD_FILTERED_LONG_TABLE,
             method_tables=INTERNAL_STANDARD_METHOD_TABLES,
             recovery_plot="results/06-figures/" + config["studyName"] + ".recovery_ratios.pdf",
             domain_plot="results/06-figures/" + config["studyName"] + ".Domain_by_sampleID.pdf",

@@ -17,7 +17,7 @@ rule generate_pipeline_report:
         cutadapt_qc=expand(
             "results/00-trimmed/{sample}.qc.txt", sample=samples["sample"]
         ),
-        long_data="results/04-formatted/" + config["studyName"] + ".long_data.tsv",
+        long_data=RESULTS_LONG_DATA,
         internal_standard_figures=INTERNAL_STANDARD_REPORT_FIGURES,
         internal_standard_table=INTERNAL_STANDARD_REPORT_TABLE
     output:

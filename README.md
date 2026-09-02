@@ -144,3 +144,9 @@ and phylum- and order-level summaries into a top-level
 `<projectName>-Results-Export/` folder. When internal standards are enabled, the
 corrected ASV table is included there as well. Older configs without
 `projectName` use `studyName` for the folder prefix.
+
+When internal standards are enabled, the ordinary exported `long_data.tsv` is
+also rebuilt without every ASV identified as an internal standard. The report
+uses this same filtered table, preventing ISD reads from appearing in domain or
+taxonomic-abundance plots. The separate `ISD_corrected_long_data.tsv` retains
+the absolute-copy correction columns but likewise excludes the standard ASVs.

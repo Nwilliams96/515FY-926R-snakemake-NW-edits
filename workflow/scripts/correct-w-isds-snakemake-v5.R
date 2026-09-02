@@ -68,6 +68,7 @@ make_wide_table <- function(data, copy_column, annotation_columns) {
 
 # Input data and validation -------------------------------------------------
 asv_table <- read_tsv(snakemake@input[["asv_table"]], show_col_types = FALSE)
+formatted_table_columns <- names(asv_table)
 # Preserve every ASV-level annotation supplied by the formatted table. This is
 # intentionally data-driven so taxonomy columns from future classifiers are
 # carried into every wide correction table without another script change.
@@ -284,7 +285,7 @@ plot1 <- ggplot(plot_data, aes(x = SampleID, y = Recovery, colour = Method)) +
     linewidth = 1
   ) +
   theme_minimal() +
-  scale_y_log10() +
+  scale_y_log10(expand = expansion(mult = c(0.15, 0.05))) +
   scale_colour_manual(values = method_colours, name = "Correction method") +
   labs(
     title = "Recovery Ratios per Sample",
@@ -320,6 +321,9 @@ for (index in seq_len(nrow(method_specs))) {
 all_internal_standard_asvs <- unique(unlist(
   map(standard_asv_paths, read_asv_ids), use.names = FALSE
 ))
+isd_filtered_asv_table <- asv_table %>%
+  filter(!ASV_hash %in% all_internal_standard_asvs) %>%
+  select(all_of(formatted_table_columns))
 asv_table <- asv_table %>%
   filter(!ASV_hash %in% all_internal_standard_asvs)
 
@@ -345,7 +349,7 @@ plot2 <- ggplot(
 ) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
-  scale_y_log10() +
+  scale_y_log10(expand = expansion(mult = c(0.15, 0.05))) +
   facet_wrap(~Method, ncol = 1) +
   theme_minimal() +
   scale_colour_manual(values = c(
@@ -365,6 +369,7 @@ plot2 <- ggplot(
   )
 
 # Tables --------------------------------------------------------------------
+write_tsv(isd_filtered_asv_table, snakemake@output[["filtered"]])
 write_tsv(asv_table, snakemake@output[["corrected"]])
 walk2(
   method_table_outputs,

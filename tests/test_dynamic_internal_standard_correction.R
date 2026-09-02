@@ -91,6 +91,7 @@ run_case <- function(number_of_standards) {
     ),
     output = list(
       corrected = file.path(root, "corrected.tsv"),
+      filtered = file.path(root, "isd-removed.tsv"),
       method_tables = method_outputs,
       recovery_plot = file.path(root, "recovery.pdf"),
       domain_plot = file.path(root, "domain.pdf"),
@@ -108,14 +109,19 @@ run_case <- function(number_of_standards) {
   suppressMessages(source(script_path, local = globalenv()))
 
   stopifnot(file.exists(snakemake@output[["corrected"]]))
+  stopifnot(file.exists(snakemake@output[["filtered"]]))
   stopifnot(all(file.exists(method_outputs)))
   stopifnot(file.exists(snakemake@output[["recovery_plot_png"]]))
   stopifnot(file.exists(snakemake@output[["domain_plot_png"]]))
 
   corrected <- read_tsv(snakemake@output[["corrected"]], show_col_types = FALSE)
+  filtered <- read_tsv(snakemake@output[["filtered"]], show_col_types = FALSE)
   first_wide <- read_tsv(method_outputs[[1]], show_col_types = FALSE)
   stopifnot(!"internal-hash-1" %in% corrected$ASV_hash)
   stopifnot("biological-hash" %in% corrected$ASV_hash)
+  stopifnot(!any(standard_hashes %in% filtered$ASV_hash))
+  stopifnot("biological-hash" %in% filtered$ASV_hash)
+  stopifnot(identical(names(filtered), names(asv_table)))
   stopifnot(paste0("Copies_Standard-", number_of_standards, "_recovery_ratio") %in% names(corrected))
   stopifnot("Domain" %in% names(first_wide))
   stopifnot("Sample-1" %in% names(first_wide))
