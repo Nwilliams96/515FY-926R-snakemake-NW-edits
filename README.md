@@ -110,6 +110,10 @@ The runner gives every Slurm job a package cache under CARC's job-specific
 contending for Conda metadata in `~/.conda/pkgs` and avoids stale-file-handle
 failures during environment creation.
 
+The small per-sample BBTools trimming, repair, and fusion commands use a fixed
+2 GB Java heap and declare 2.5 GB per job to Snakemake. This prevents concurrent
+BBTools processes from each auto-claiming most of the node's available memory.
+
 When databases must be built, SILVA and PR2 preparation can run concurrently.
 BBSplit indexing and both primer-extraction steps use up to eight cores. QIIME's
 naive-Bayes classifier-training action does not expose a worker-count option, so

@@ -39,6 +39,8 @@ rule bbduk_cut_reads:
     params:
         truncR1=config["trunclens"]["truncR1"],
         truncR2=config["trunclens"]["truncR2"]
+    resources:
+        mem_mb=2500,
     conda:
         "../envs/bbmap.yaml"
     log:
@@ -52,6 +54,8 @@ rule fuse_trimmed_euk_seqs:
         r2=rules.bbduk_cut_reads.output.r2
     output:
         "results/02-euks/04-concatenated/{sample}.euk.concatenated.fastq",
+    resources:
+        mem_mb=2500,
     conda:
         "../envs/bbmap.yaml"
     log:
