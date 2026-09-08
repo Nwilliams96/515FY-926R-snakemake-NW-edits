@@ -114,6 +114,11 @@ The small per-sample BBTools trimming, repair, and fusion commands use a fixed
 2 GB Java heap and declare 2.5 GB per job to Snakemake. This prevents concurrent
 BBTools processes from each auto-claiming most of the node's available memory.
 
+Sample identifiers are imported as text when the final QIIME metadata tables
+are assembled, so numeric-only IDs and leading zeroes are retained correctly.
+DADA2 export scripts also propagate failures from QIIME and BIOM commands rather
+than allowing a failed piped command to appear successful.
+
 When databases must be built, SILVA and PR2 preparation can run concurrently.
 BBSplit indexing and both primer-extraction steps use up to eight cores. QIIME's
 naive-Bayes classifier-training action does not expose a worker-count option, so

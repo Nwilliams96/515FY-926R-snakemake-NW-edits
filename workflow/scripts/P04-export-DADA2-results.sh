@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-timestamp=`date +"%y%m%d-%H%M"`
+set -euo pipefail
+
+timestamp=$(date +"%y%m%d-%H%M")
 
 qiime tools export --input-path ${snakemake_input[0]}/representative_sequences.qza --output-path ${snakemake_output[0]} 2>&1 | tee -a ${snakemake_log[0]}
 

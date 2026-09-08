@@ -4,22 +4,42 @@ import pandas as pd
 import sys
 
 #read in previously produced manifest
-manifestDF = pd.read_csv(snakemake.input["manifest"], sep='\t', header=0)
+manifestDF = pd.read_csv(
+    snakemake.input["manifest"],
+    sep='\t',
+    header=0,
+    dtype={"sample-id": str},
+)
 manifestDF.set_index("sample-id", inplace=True) #This makes the first column the index
 
 #samples.tsv, provided by user, containing metadata
-samplesDF = pd.read_csv(snakemake.input["samplesdottsv"], sep='\t', header=0)
-samplesDF["sample"] = samplesDF["sample"].str.replace('_','-')
+samplesDF = pd.read_csv(
+    snakemake.input["samplesdottsv"],
+    sep='\t',
+    header=0,
+    dtype={"sample": str},
+)
+samplesDF["sample"] = samplesDF["sample"].str.replace('_', '-', regex=False)
 samplesDF.set_index("sample", inplace=True) #This makes the first column the index
 
 #import qiime2 stats from DADA2, get only "non-chimeric" which is
 #the number of reads remaining after DADA2 pipeline
-denoisingStatsDF = pd.read_csv(snakemake.input["eukstats"], sep='\t', header=0)
+denoisingStatsDF = pd.read_csv(
+    snakemake.input["eukstats"],
+    sep='\t',
+    header=0,
+    dtype={"sample-id": str},
+)
 denoisingStatsDF.set_index("sample-id", inplace=True)
 denoisingStatsDF = denoisingStatsDF.filter(["non-chimeric"])
 
-eukfracDF = pd.read_csv(snakemake.input["eukfracpersample"], sep='\t', header=0)
-eukfracDF["sample"] = eukfracDF["sample"].str.replace('_','-')
+eukfracDF = pd.read_csv(
+    snakemake.input["eukfracpersample"],
+    sep='\t',
+    header=0,
+    dtype={"sample": str},
+)
+eukfracDF["sample"] = eukfracDF["sample"].str.replace('_', '-', regex=False)
 eukfracDF.set_index("sample", inplace=True)
 
 #merge all into one file, removing file paths specified in configs
