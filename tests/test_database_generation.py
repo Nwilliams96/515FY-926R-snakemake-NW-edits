@@ -66,6 +66,18 @@ class DatabaseGenerationTests(unittest.TestCase):
             ROOT / "workflow/envs/rachis-qiime2-linux-64-2026.7.yml"
         ).read_text(encoding="utf-8")
         self.assertIn("bioconductor-dada2=", qiime_env)
+        self.assertIn("q2-dada2=2026.7.0", qiime_env)
+        self.assertIn("q2-feature-classifier=2026.7.0", qiime_env)
+        self.assertIn("rescript=2026.7.0", qiime_env)
+        self.assertIn("scikit-learn=1.7.1", qiime_env)
+        self.assertNotIn("\n- deblur=", qiime_env)
+        self.assertNotIn("\n- q2-deblur=", qiime_env)
+        self.assertNotIn("\n- sortmerna=", qiime_env)
+
+        self.assertNotIn(
+            "input:\n        temp(",
+            downloads,
+        )
 
     def test_reference_download_is_atomic_and_checksum_verified(self):
         with tempfile.TemporaryDirectory() as tmp:

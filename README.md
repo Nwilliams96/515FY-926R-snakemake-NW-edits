@@ -80,6 +80,10 @@ published checksum before placing it in the shared `database_dir`. The bundled
 QIIME 2 2026.7 environment matches the version used to train that classifier.
 Older generated configs that still name this repository's bundled QIIME 2
 2024.5 or 2025.7 definition are automatically migrated to the 2026.7 definition.
+The bundled Linux definition is based on the official QIIME 2 2026.7 file but
+omits Deblur and its obsolete SortMeRNA 2.0 dependency. This workflow uses
+DADA2 exclusively, and excluding that unused dependency prevents Conda solver
+failures without changing any pipeline analysis step.
 
 SILVA 144 introduces a prokaryotic `Kingdom` rank and provides a consistent
 seven-rank lineage from Domain through Genus. The formatted long table and HTML

@@ -71,7 +71,7 @@ rule download_pr2:
 
 rule unzip_pr2:
     input:
-        temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz"),
+        DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta.gz",
     output:
         temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"),
     log:

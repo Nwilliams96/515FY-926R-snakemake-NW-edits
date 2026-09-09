@@ -1,3 +1,7 @@
+# Based on the official QIIME 2 2026.7 Linux environment. The Deblur plugin and
+# its obsolete SortMeRNA 2.0 dependency are intentionally omitted because this
+# workflow uses DADA2 exclusively and the retired dependency no longer solves
+# reliably from the current Conda channel metadata.
 channels:
 - conda-forge
 - bioconda
@@ -78,7 +82,6 @@ dependencies:
 - cycler=0.12.1
 - cyrus-sasl=2.1.28
 - dbus=1.16.2
-- deblur=1.1.1
 - decorator=5.3.1
 - dendropy=5.0.11
 - dill=0.4.1
@@ -350,7 +353,6 @@ dependencies:
 - q2-composition=2026.7.0
 - q2-cutadapt=2026.7.0
 - q2-dada2=2026.7.0
-- q2-deblur=2026.7.0
 - q2-demux=2026.7.0
 - q2-diversity=2026.7.0
 - q2-diversity-lib=2026.7.0
@@ -608,7 +610,6 @@ dependencies:
 - six=1.17.0
 - sniffio=1.3.1
 - sortedcontainers=2.4.0
-- sortmerna=2.0
 - stack_data=0.6.3
 - statsmodels=0.14.6
 - stringcase=1.2.0
