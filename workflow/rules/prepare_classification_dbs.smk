@@ -15,6 +15,23 @@ rule download_SILVA_144_classifier:
     script:
         "../scripts/download_verified_reference.py"
 
+# The signed QIIME classifier above intentionally stops at Genus. Species are
+# added separately only for unambiguous, exact ASV matches to SILVA's official
+# DADA2 species reference.
+rule download_SILVA_144_species_reference:
+    input:
+        rules.initialize_database_directories.output.marker
+    output:
+        SILVA_SPECIES_REFERENCE
+    params:
+        url=SILVA_SPECIES_REFERENCE_URL,
+        md5=SILVA_SPECIES_REFERENCE_MD5,
+    log:
+        "logs/SILVA_144_species_reference_download.log"
+    priority: 50
+    script:
+        "../scripts/download_verified_reference.py"
+
 rule clean_pr2_fasta_extract_headers:
     input:
         DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.fasta"

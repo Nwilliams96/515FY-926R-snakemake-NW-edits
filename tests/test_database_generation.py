@@ -36,10 +36,13 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertGreaterEqual(classification.count("threads: 8"), 1)
         self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
         self.assertIn("rule download_SILVA_144_classifier:", classification)
+        self.assertIn("rule download_SILVA_144_species_reference:", classification)
         self.assertNotIn("get-silva-data", classification)
         self.assertIn('SILVA_VERSION = "144"', common)
         self.assertIn("SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza", common)
         self.assertIn("f7757b01eb82e0ac78bf06427e410095", common)
+        self.assertIn("silva_v144_assignSpecies.fa.gz", common)
+        self.assertIn("444de7c0cce0b66addda7a3f8b38e012", common)
         self.assertIn("rachis-qiime2-linux-64-2026.7.yml", common)
         self.assertIn("_dereplicated_final_classifier_qiime2-2026.7.qza", common)
         self.assertIn("output:\n        PR2_CLASSIFIER", classification)
@@ -47,6 +50,17 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
+
+        species_script = (ROOT / "workflow/scripts/assign_silva_species.R").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("allowMultiple = FALSE", species_script)
+        self.assertIn("tryRC = TRUE", species_script)
+        self.assertIn("Genus_Agrees", species_script)
+        qiime_env = (
+            ROOT / "workflow/envs/rachis-qiime2-linux-64-2026.7.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("bioconductor-dada2=", qiime_env)
 
     def test_reference_download_is_atomic_and_checksum_verified(self):
         with tempfile.TemporaryDirectory() as tmp:

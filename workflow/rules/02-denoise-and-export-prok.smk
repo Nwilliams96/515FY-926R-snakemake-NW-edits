@@ -174,7 +174,7 @@ rule export_tax_convert_biom:
         onlycyano="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_exclude_o__Chloroplast_filtered_table.qza",
         onlyalgae="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_NOTE_includes_chloroplasts_filtered_table.qza",
     output:
-        mergedtaxtsv="results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv",
+        genus_mergedtaxtsv=temp("results/02-proks/10-exports/" + config["studyName"] + ".taxonomy-through-genus.tsv"),
         all16Stable_biom=temp("results/02-proks/10-exports/" + config["studyName"] + ".all-16S-seqs.biom"),
         noarch_biom=temp("results/02-proks/10-exports/" + config["studyName"] + ".exclude_d__Archaea_filtered_table.biom"),
         nomito_biom=temp("results/02-proks/10-exports/" + config["studyName"] + ".exclude_f__Mitochondria_filtered_table.biom"),
@@ -191,9 +191,28 @@ rule export_tax_convert_biom:
     script:
         "../scripts/P10a-generate-biom-tables.sh"
 
+rule assign_SILVA_144_species:
+    input:
+        taxonomy=rules.export_tax_convert_biom.output.genus_mergedtaxtsv,
+        sequences=rules.export_DADA2_results.output.latestseqs,
+        species_reference=SILVA_SPECIES_REFERENCE,
+    output:
+        taxonomy="results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv",
+        summary="results/02-proks/10-exports/" + config["studyName"] + ".SILVA-144.species-assignment-summary.tsv",
+    conda:
+        config["qiime2version"]
+    threads: 1
+    resources:
+        mem_mb=12000,
+        runtime=60,
+    log:
+        "logs/02-denoise-and-export-prok/10-assign-SILVA-species.log"
+    script:
+        "../scripts/assign_silva_species.R"
+
 rule add_tax_to_biom:
     input:
-        mergedtaxtsv="results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv",
+        mergedtaxtsv=rules.assign_SILVA_144_species.output.taxonomy,
         all16Stable_biom="results/02-proks/10-exports/" + config["studyName"] + ".all-16S-seqs.biom",
         noarch_biom="results/02-proks/10-exports/" + config["studyName"] + ".exclude_d__Archaea_filtered_table.biom",
         nomito_biom="results/02-proks/10-exports/" + config["studyName"] + ".exclude_f__Mitochondria_filtered_table.biom",

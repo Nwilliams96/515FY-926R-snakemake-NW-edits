@@ -76,6 +76,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "18S\t1000\t0.5\t300\t0.3\t1.666666667\n",
                 encoding="utf-8",
             )
+            (root / "species-assignment.tsv").write_text(
+                "total_16S_ASVs\teligible_SILVA_ASVs\t"
+                "exact_unambiguous_species_matches\tspecies_labels_added\t"
+                "exact_matches_withheld_by_genus_check\t"
+                "unmatched_or_ambiguous\n"
+                "5\t4\t3\t2\t1\t1\n",
+                encoding="utf-8",
+            )
             (root / "S_1.qc.txt").write_text(
                 "Total read pairs processed:              1,250\n"
                 "Pairs written (passing filters):          1,100 (88.0%)\n",
@@ -125,6 +133,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "stats16s": root / "16.tsv",
                     "stats18s": root / "18.tsv",
                     "correction_factors": root / "correction-factors.tsv",
+                    "species_assignment": root / "species-assignment.tsv",
                     "cutadapt_qc": [root / "S_1.qc.txt"],
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
@@ -179,6 +188,9 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Effective DADA2 settings used", rendered)
             self.assertIn("16S and 18S correction factors", rendered)
             self.assertIn("Correction factor used", rendered)
+            self.assertIn("SILVA 144 species matching", rendered)
+            self.assertIn("unambiguous exact matches", rendered)
+            self.assertIn("2</strong><span>species labels added", rendered)
             self.assertIn("0.714286", rendered)
             self.assertIn("1.66667", rendered)
             self.assertIn("max_ee_f", rendered)

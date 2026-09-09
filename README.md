@@ -85,9 +85,16 @@ SILVA 144 introduces a prokaryotic `Kingdom` rank and provides a consistent
 seven-rank lineage from Domain through Genus. The formatted long table and HTML
 report therefore include `Kingdom`. Taxonomy parsing is based on rank prefixes
 (`d__`, `k__`, `p__`, and so on), so that new rank cannot shift Phylum, Class,
-Order, Family, or Genus into the wrong columns. The official uniform SILVA
-classifier stops at Genus, so `Species` remains blank for SILVA assignments;
-PR2-derived eukaryotic species labels remain available.
+Order, Family, or Genus into the wrong columns. The official uniform QIIME 2
+classifier stops at Genus. The workflow therefore follows classification with
+an exact-match search against SILVA's official version 144 DADA2 species
+reference. An unambiguous exact match is accepted only when its genus agrees
+with the QIIME 2 assignment. For example, an accepted match is appended as
+`s__Vibrio cholerae`, and the formatted outputs contain `Vibrio` in `Genus` and
+`Vibrio cholerae` in `Species`. Unmatched, ambiguous, or genus-conflicting ASVs
+remain blank at Species. SILVA notes that these organism names are not curated,
+so species calls should be treated as provisional. PR2-derived eukaryotic
+species labels remain available independently.
 
 The chloroplast/cyanobacterial subsetting step accepts both the older
 `p__Cyanobacteria` label and SILVA 144's `p__Cyanobacteriota` label, preserving
@@ -97,10 +104,11 @@ If non-default primers are entered, the workflow uses SILVA's official
 full-length classifier instead of applying the 515Y/926R-specific model to an
 incompatible region. PR2 remains the primary eukaryotic classifier.
 
-Both release-pinned classifiers live in the shared `database_dir`. After this
-upgrade, the first run downloads SILVA 144 and builds a QIIME 2 2026.7-labelled
-PR2 classifier if they are not already present; later project clones reuse
-them. This one-time classifier update also occurs when
+Both release-pinned classifiers and the SILVA species reference live in the
+shared `database_dir`. After this upgrade, the first run downloads the SILVA
+144 classifier, downloads the approximately 141 MB species reference, and
+builds a QIIME 2 2026.7-labelled PR2 classifier if they are not already present;
+later project clones reuse them. This one-time database setup also occurs when
 `use_preexisting_databases: true`; that setting continues to require and reuse
 the existing BBsplit index rather than rebuilding it.
 

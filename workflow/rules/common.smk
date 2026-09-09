@@ -179,6 +179,18 @@ else:
 SILVA_CLASSIFIER = os.path.join(
     DATABASE_DIR, "classification", "SILVA", SILVA_CLASSIFIER_FILENAME
 )
+SILVA_SPECIES_REFERENCE_FILENAME = "silva_v144_assignSpecies.fa.gz"
+SILVA_SPECIES_REFERENCE_URL = (
+    "https://www.arb-silva.de/fileadmin/silva_databases/release_144/"
+    "DADA2/1.36.0/SSU/" + SILVA_SPECIES_REFERENCE_FILENAME
+)
+SILVA_SPECIES_REFERENCE_MD5 = "444de7c0cce0b66addda7a3f8b38e012"
+SILVA_SPECIES_REFERENCE = os.path.join(
+    DATABASE_DIR,
+    "classification",
+    "SILVA",
+    SILVA_SPECIES_REFERENCE_FILENAME,
+)
 PR2_CLASSIFIER = os.path.join(
     DATABASE_DIR,
     "classification",
