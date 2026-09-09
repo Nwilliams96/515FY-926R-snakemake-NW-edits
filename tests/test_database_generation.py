@@ -35,6 +35,10 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertEqual(classification.count("--p-n-jobs {threads}"), 1)
         self.assertGreaterEqual(classification.count("threads: 8"), 1)
         self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
+        self.assertIn("extractionStats=temp(", classification)
+        self.assertIn(
+            "--o-read-extraction-stats {output.extractionStats:q}", classification
+        )
         self.assertIn("rule download_SILVA_144_classifier:", classification)
         self.assertIn("rule download_SILVA_144_species_reference:", classification)
         self.assertNotIn("get-silva-data", classification)

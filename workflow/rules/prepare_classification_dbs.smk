@@ -102,7 +102,8 @@ rule extract_primers_pr2:
         fwdPrimer=config["fwdPrimer"],
         revPrimer=config["revPrimer"]
     output:
-        slicedDNA=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza")
+        slicedDNA=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".qza"),
+        extractionStats=temp(DATABASE_PREFIX + "classification/PR2/pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_" + config["fwdPrimer"] + "_" + config["revPrimer"] + ".read-extraction-stats.qza")
     log:
         "logs/PR2_classification_db_prep_qc_PR2_seqs_extract_primers.log"
     priority: 45
@@ -113,7 +114,8 @@ rule extract_primers_pr2:
         "qiime feature-classifier extract-reads --i-sequences {input:q} "
         "--p-f-primer {params.fwdPrimer:q} --p-r-primer {params.revPrimer:q} "
         "--p-n-jobs {threads} --p-read-orientation forward "
-        "--o-reads {output.slicedDNA:q} 2> {log:q}"
+        "--o-reads {output.slicedDNA:q} "
+        "--o-read-extraction-stats {output.extractionStats:q} 2> {log:q}"
 
 rule dereplicate_extracted_pr2_reads:
     input:
