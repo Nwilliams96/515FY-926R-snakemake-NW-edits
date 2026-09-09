@@ -12,6 +12,24 @@ from snakemake.utils import validate
 USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
 
+# SILVA 144 classifiers were built with QIIME 2 2026.7 and scikit-learn 1.7.1.
+# Transparently migrate configs that still point at one of this repository's
+# older bundled QIIME environments. Explicit external environment paths remain
+# under the user's control.
+DEFAULT_QIIME2_ENV = "../envs/rachis-qiime2-linux-64-2026.7.yml"
+configured_qiime2_env = str(config.get("qiime2version", "")).strip()
+if (
+    not configured_qiime2_env
+    or os.path.basename(configured_qiime2_env) in {
+        "qiime2-amplicon-ubuntu-2024-5-conda.yml",
+        "qiime2-amplicon-ubuntu-2025-7-conda.yml",
+    }
+):
+    config["qiime2version"] = DEFAULT_QIIME2_ENV
+
+SILVA_VERSION = "144"
+config["SILVAversion"] = SILVA_VERSION
+
 # DADA2 parameters are configurable per marker-gene path. These fallbacks are
 # the values used by the workflow before the controls were exposed, so older
 # study configs remain reproducible after updating the pipeline.
@@ -127,15 +145,39 @@ DATABASE_PREFIX = DATABASE_DIR + os.sep
 BBSPLIT_DB_DIR = os.path.join(
     DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db"
 )
+SILVA_144_BASE_URL = (
+    "https://www.arb-silva.de/fileadmin/silva_databases/current/"
+    "QIIME2/2026.7/SSU/"
+)
+if (
+    config["fwdPrimer"] == "GTGYCAGCMGCCGCGGTAA"
+    and config["revPrimer"] == "CCGYCAATTYMTTTRAGTTT"
+):
+    SILVA_CLASSIFIER_FILENAME = (
+        "SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza"
+    )
+    SILVA_CLASSIFIER_URL = (
+        SILVA_144_BASE_URL
+        + "V4V5-515f-926r/uniform/"
+        + SILVA_CLASSIFIER_FILENAME
+    )
+    SILVA_CLASSIFIER_MD5 = "f7757b01eb82e0ac78bf06427e410095"
+else:
+    # A region-specific classifier would be invalid for other primer pairs.
+    # Use SILVA's full-length classifier as the safe general SSU fallback.
+    SILVA_CLASSIFIER_FILENAME = (
+        "SILVA_144_SSURef_NR99_full-length_prokaryotes-"
+        "rank-propagation_uniq_genus_uniform_classifier.qza"
+    )
+    SILVA_CLASSIFIER_URL = (
+        SILVA_144_BASE_URL
+        + "full-length/uniform/"
+        + SILVA_CLASSIFIER_FILENAME
+    )
+    SILVA_CLASSIFIER_MD5 = "e16b9bc78dafa2f344563e570bbf25ba"
+
 SILVA_CLASSIFIER = os.path.join(
-    DATABASE_DIR,
-    "classification",
-    "SILVA",
-    "silva-ssu-nr99-tax-dereplicated-sliced_"
-    + config["fwdPrimer"]
-    + "_"
-    + config["revPrimer"]
-    + "_dereplicated_final_classifier_USE_ME.qza",
+    DATABASE_DIR, "classification", "SILVA", SILVA_CLASSIFIER_FILENAME
 )
 PR2_CLASSIFIER = os.path.join(
     DATABASE_DIR,
@@ -145,23 +187,26 @@ PR2_CLASSIFIER = os.path.join(
     + config["fwdPrimer"]
     + "_"
     + config["revPrimer"]
-    + "_dereplicated_final_classifier_USE_ME.qza",
+    + "_dereplicated_final_classifier_qiime2-2026.7.qza",
 )
 
 if USE_PREEXISTING_DATABASES:
+    # Release-pinned SILVA and PR2 classifiers are created on demand and reused
+    # from database_dir. Only the separately supplied BBsplit index must exist
+    # before a run using the preexisting-database option can begin.
     missing_database_resources = [
         path
-        for path in [BBSPLIT_DB_DIR, SILVA_CLASSIFIER, PR2_CLASSIFIER]
+        for path in [BBSPLIT_DB_DIR]
         if not os.path.exists(path)
     ]
     if missing_database_resources:
         missing_list = "\n  - ".join(missing_database_resources)
         raise WorkflowError(
             "use_preexisting_databases is true, but the following configured "
-            "database resources were not found:\n  - "
+            "BBsplit database resources were not found:\n  - "
             + missing_list
             + "\nSet database_dir to the shared database root that contains "
-            "bbsplit-db/ and classification/, or set "
+            "bbsplit-db/, or set "
             "use_preexisting_databases to false so the workflow builds them."
         )
 

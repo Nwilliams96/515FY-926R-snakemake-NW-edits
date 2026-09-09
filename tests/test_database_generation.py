@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,12 +11,20 @@ SPEC = importlib.util.spec_from_file_location("reformat_pr2_reference", REFORMAT
 REFORMAT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(REFORMAT)
 
+DOWNLOAD_SCRIPT = ROOT / "workflow/scripts/download_verified_reference.py"
+DOWNLOAD_SPEC = importlib.util.spec_from_file_location(
+    "download_verified_reference", DOWNLOAD_SCRIPT
+)
+DOWNLOAD = importlib.util.module_from_spec(DOWNLOAD_SPEC)
+DOWNLOAD_SPEC.loader.exec_module(DOWNLOAD)
+
 
 class DatabaseGenerationTests(unittest.TestCase):
     def test_database_rules_are_self_contained_and_use_supported_parallelism(self):
         classification = (ROOT / "workflow/rules/prepare_classification_dbs.smk").read_text(
             encoding="utf-8"
         )
+        common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
         downloads = (ROOT / "workflow/rules/download_databases.smk").read_text(
             encoding="utf-8"
         )
@@ -23,13 +32,48 @@ class DatabaseGenerationTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertNotIn("tax-classifier-construction", classification)
-        self.assertEqual(classification.count("--p-n-jobs {threads}"), 2)
-        self.assertGreaterEqual(classification.count("threads: 8"), 2)
-        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 2)
+        self.assertEqual(classification.count("--p-n-jobs {threads}"), 1)
+        self.assertGreaterEqual(classification.count("threads: 8"), 1)
+        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
+        self.assertIn("rule download_SILVA_144_classifier:", classification)
+        self.assertNotIn("get-silva-data", classification)
+        self.assertIn('SILVA_VERSION = "144"', common)
+        self.assertIn("SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza", common)
+        self.assertIn("f7757b01eb82e0ac78bf06427e410095", common)
+        self.assertIn("rachis-qiime2-linux-64-2026.7.yml", common)
+        self.assertIn("_dereplicated_final_classifier_qiime2-2026.7.qza", common)
+        self.assertIn("output:\n        PR2_CLASSIFIER", classification)
         self.assertIn("threads: 8", bbsplit)
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
+
+    def test_reference_download_is_atomic_and_checksum_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.qza"
+            destination = root / "classification" / "classifier.qza"
+            source.write_bytes(b"signed SILVA classifier fixture")
+            checksum = hashlib.md5(source.read_bytes()).hexdigest()
+
+            DOWNLOAD.download_verified(source.as_uri(), destination, checksum)
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+            self.assertFalse(destination.with_name(destination.name + ".part").exists())
+
+            destination.unlink()
+            with self.assertRaises(ValueError):
+                DOWNLOAD.download_verified(source.as_uri(), destination, "0" * 32)
+            self.assertFalse(destination.exists())
+            self.assertFalse(destination.with_name(destination.name + ".part").exists())
+
+    def test_long_data_parser_is_rank_named_and_silva_144_safe(self):
+        source = (ROOT / "workflow/scripts/long-data-preparation.R").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('Kingdom = extract_prefixed_rank(Taxonomy, "k__")', source)
+        self.assertIn("parse_prefixed_taxonomy", source)
+        self.assertNotIn('separate(Taxonomy, c("Domain","Phylum"', source)
+        self.assertIn('"Domain", "Kingdom", "Supergroup"', source)
 
     def test_new_amplicon_concentration_name_and_isd_ids_reach_outputs(self):
         common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")

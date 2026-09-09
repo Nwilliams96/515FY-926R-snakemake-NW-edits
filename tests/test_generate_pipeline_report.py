@@ -82,14 +82,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "long.tsv").write_text(
-                "SampleID\tDomain\tPhylum\tDivision\tClass\tSequence_Type\t"
+                "SampleID\tDomain\tKingdom\tPhylum\tDivision\tClass\tSequence_Type\t"
                 "plastid_16S_rRNA\tASV_hash\tCorrected_Sequence_Counts\n"
-                "S-1\tBacteria\tProteobacteria\t\t\tProkaryotic_16S\tno\tA1\t600\n"
-                "S-1\tEukaryota\t\tDinoflagellata\t\tEukaryote_18S\tno\tA2\t200\n"
-                "S-1\tEukaryota\t\tChloroplastida\t\tChloroplast_16S\tyes\tA3\t100\n"
-                "S-1\tEukaryota\t\t\tMitochondria\tEukaryote_18S\tno\tA4\t50\n"
-                "S-1\tUnassigned\t\t\t\tUnassigned\tno\tA5\t25\n"
-                "S-1\tBacteria\tInternal-standard\t\t\tProkaryotic_16S\tno\tA-ISD\t1000\n",
+                "S-1\tBacteria\tPseudomonadati\tPseudomonadota\t\t\tProkaryotic_16S\tno\tA1\t600\n"
+                "S-1\tEukaryota\t\t\tDinoflagellata\t\tEukaryote_18S\tno\tA2\t200\n"
+                "S-1\tEukaryota\t\t\tChloroplastida\t\tChloroplast_16S\tyes\tA3\t100\n"
+                "S-1\tEukaryota\t\t\t\tMitochondria\tEukaryote_18S\tno\tA4\t50\n"
+                "S-1\tUnassigned\t\t\t\t\tUnassigned\tno\tA5\t25\n"
+                "S-1\tBacteria\t\tInternal-standard\t\t\tProkaryotic_16S\tno\tA-ISD\t1000\n",
                 encoding="utf-8",
             )
             # A tiny valid PNG is sufficient to verify base64 embedding.
@@ -148,11 +148,12 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("Reads retained after DADA2", rendered)
             self.assertIn("S-1: 800", rendered)
             self.assertIn("Not applicable", rendered)
-            self.assertIn("Proteobacteria", rendered)
+            self.assertIn("Pseudomonadota", rendered)
             self.assertIn("Interactive taxonomy bar plot", rendered)
             self.assertIn('id="taxonomy-explorer-data"', rendered)
             self.assertIn('id="taxonomy-plot-field"', rendered)
             self.assertIn('id="taxonomy-rank"', rendered)
+            self.assertIn('"Kingdom":{"Pseudomonadati":600.0,', rendered)
             self.assertIn("justify-content:flex-start", rendered)
             self.assertIn("top:308px", rendered)
             self.assertIn('class="frozen-y-axis"', rendered)
@@ -162,7 +163,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 '"metadataFields":["SampleID","Condition","Latitude","Longitude","Depth"]',
                 rendered,
             )
-            self.assertIn('"Phylum":{"Proteobacteria":600.0,', rendered)
+            self.assertIn('"Phylum":{"Pseudomonadota":600.0,', rendered)
             self.assertIn("Sequence assignments", rendered)
             self.assertIn("total 16S", rendered)
             self.assertIn("750</strong><span>total 16S", rendered)
@@ -199,11 +200,16 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 ["SampleID", "Condition", "Latitude", "Longitude", "Depth"],
             )
             self.assertIn("Phylum", explorer["ranks"])
+            self.assertIn("Kingdom", explorer["ranks"])
             self.assertEqual(explorer["samples"]["S-1"]["metadata"]["SampleID"], "S-1")
             self.assertEqual(explorer["samples"]["S-1"]["metadata"]["Condition"], "test")
             self.assertEqual(explorer["samples"]["S-1"]["metadata"]["Latitude"], "-39.49")
             self.assertEqual(
-                explorer["samples"]["S-1"]["taxonomy"]["Phylum"]["Proteobacteria"],
+                explorer["samples"]["S-1"]["taxonomy"]["Phylum"]["Pseudomonadota"],
+                600,
+            )
+            self.assertEqual(
+                explorer["samples"]["S-1"]["taxonomy"]["Kingdom"]["Pseudomonadati"],
                 600,
             )
 

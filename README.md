@@ -71,6 +71,35 @@ The cloned repository intentionally does not include a `config/` folder. Create
 and download the study-specific setup package from the pipeline tutorial, then
 place its complete `config/` folder in the repository before running Snakemake.
 
+## Taxonomy databases
+
+Prokaryotic ASVs are classified with the official SILVA 144 SSU Ref NR99
+uniform QIIME 2 classifier. With the pipeline's default 515Y/926R primers, the
+workflow downloads SILVA's matching V4–V5 region classifier and verifies its
+published checksum before placing it in the shared `database_dir`. The bundled
+QIIME 2 2026.7 environment matches the version used to train that classifier.
+Older generated configs that still name this repository's bundled QIIME 2
+2024.5 or 2025.7 definition are automatically migrated to the 2026.7 definition.
+
+SILVA 144 introduces a prokaryotic `Kingdom` rank and provides a consistent
+seven-rank lineage from Domain through Genus. The formatted long table and HTML
+report therefore include `Kingdom`. Taxonomy parsing is based on rank prefixes
+(`d__`, `k__`, `p__`, and so on), so that new rank cannot shift Phylum, Class,
+Order, Family, or Genus into the wrong columns. The official uniform SILVA
+classifier stops at Genus, so `Species` remains blank for SILVA assignments;
+PR2-derived eukaryotic species labels remain available.
+
+If non-default primers are entered, the workflow uses SILVA's official
+full-length classifier instead of applying the 515Y/926R-specific model to an
+incompatible region. PR2 remains the primary eukaryotic classifier.
+
+Both release-pinned classifiers live in the shared `database_dir`. After this
+upgrade, the first run downloads SILVA 144 and builds a QIIME 2 2026.7-labelled
+PR2 classifier if they are not already present; later project clones reuse
+them. This one-time classifier update also occurs when
+`use_preexisting_databases: true`; that setting continues to require and reuse
+the existing BBsplit index rather than rebuilding it.
+
 ## DADA2 controls
 
 The tutorial exposes separate DADA2 settings for the paired 16S path and the
@@ -119,11 +148,11 @@ are assembled, so numeric-only IDs and leading zeroes are retained correctly.
 DADA2 export scripts also propagate failures from QIIME and BIOM commands rather
 than allowing a failed piped command to appear successful.
 
-When databases must be built, SILVA and PR2 preparation can run concurrently.
-BBSplit indexing and both primer-extraction steps use up to eight cores. QIIME's
-naive-Bayes classifier-training action does not expose a worker-count option, so
-each classifier-training command remains single-core while the independent
-SILVA and PR2 branches may still run in parallel.
+When databases must be built, the official pre-trained SILVA classifier is
+downloaded while PR2 preparation proceeds independently. BBSplit indexing and
+PR2 primer extraction use up to eight cores. QIIME's naive-Bayes classifier-
+training action does not expose a worker-count option, so the final PR2
+classifier-training command remains single-core.
 
 ## Run report
 
@@ -145,8 +174,8 @@ are chosen for colour-vision accessibility.
 The taxonomy explorer provides a QIIME 2-style, 100%-stacked taxonomic bar plot
 with one bar per sample. It can order and filter plotted samples by SampleID,
 Condition, Latitude, Longitude, or Depth from `config/samples.tsv`, and display
-every taxonomy level present in the formatted data, from domain through species
-(including PR2 ranks and ProPortal ecotypes). It is embedded in the
+every taxonomy level present in the formatted data, from Domain through Species,
+including SILVA 144's Kingdom rank, PR2 ranks, and ProPortal ecotypes. It is embedded in the
 self-contained report and works without an internet connection.
 
 For convenient downloading, the workflow copies the report, formatted data,

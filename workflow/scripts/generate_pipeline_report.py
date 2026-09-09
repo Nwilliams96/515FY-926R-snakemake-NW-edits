@@ -20,7 +20,7 @@ PALETTE = [
 ]
 
 TAXONOMY_RANKS = (
-    "Domain", "Supergroup", "Division", "Subdivision", "Phylum", "Class",
+    "Domain", "Kingdom", "Supergroup", "Division", "Subdivision", "Phylum", "Class",
     "Order", "Family", "Genus", "Species", "ProPortal_ASV_Ecotype",
 )
 
@@ -842,7 +842,7 @@ def sequence_assignment(row):
     lineage = " ".join(
         str(row.get(key) or "")
         for key in (
-            "Domain", "Supergroup", "Division", "Subdivision", "Phylum",
+            "Domain", "Kingdom", "Supergroup", "Division", "Subdivision", "Phylum",
             "Class", "Order", "Family", "Genus", "Species",
             "ProPortal_ASV_Ecotype",
         )
