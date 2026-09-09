@@ -50,6 +50,11 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
+        self.assertIn("USE_PREEXISTING_BBSPLIT_DATABASE", common)
+        self.assertIn("USE_PREEXISTING_SILVA_DATABASE", common)
+        self.assertIn("USE_PREEXISTING_PR2_DATABASE", common)
+        snakefile = (ROOT / "workflow/Snakefile").read_text(encoding="utf-8")
+        self.assertIn("if not USE_PREEXISTING_BBSPLIT_DATABASE:", snakefile)
 
         species_script = (ROOT / "workflow/scripts/assign_silva_species.R").read_text(
             encoding="utf-8"

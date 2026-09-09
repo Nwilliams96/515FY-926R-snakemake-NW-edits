@@ -9,7 +9,20 @@ from snakemake.utils import validate
 # Resolve optional workflow branches and the shared database location once so
 # every rule uses the same paths. Database files always live outside the
 # run-specific repository clone.
-USE_PREEXISTING_DATABASES = config.get("use_preexisting_databases", False)
+# The three database families can be managed independently. The legacy setting
+# remains the fallback for BBsplit because that was the only database branch it
+# controlled. SILVA and PR2 retain their historical create-if-missing behavior
+# when the new settings are absent.
+USE_PREEXISTING_BBSPLIT_DATABASE = config.get(
+    "use_preexisting_bbsplit_database",
+    config.get("use_preexisting_databases", False),
+)
+USE_PREEXISTING_SILVA_DATABASE = config.get(
+    "use_preexisting_silva_database", False
+)
+USE_PREEXISTING_PR2_DATABASE = config.get(
+    "use_preexisting_pr2_database", False
+)
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
 
 # SILVA 144 classifiers were built with QIIME 2 2026.7 and scikit-learn 1.7.1.
@@ -202,24 +215,39 @@ PR2_CLASSIFIER = os.path.join(
     + "_dereplicated_final_classifier_qiime2-2026.7.qza",
 )
 
-if USE_PREEXISTING_DATABASES:
-    # Release-pinned SILVA and PR2 classifiers are created on demand and reused
-    # from database_dir. Only the separately supplied BBsplit index must exist
-    # before a run using the preexisting-database option can begin.
+required_preexisting_database_resources = []
+if USE_PREEXISTING_BBSPLIT_DATABASE:
+    required_preexisting_database_resources.append(
+        ("BBsplit", BBSPLIT_DB_DIR)
+    )
+if USE_PREEXISTING_SILVA_DATABASE:
+    required_preexisting_database_resources.extend(
+        [
+            ("SILVA classifier", SILVA_CLASSIFIER),
+            ("SILVA species reference", SILVA_SPECIES_REFERENCE),
+        ]
+    )
+if USE_PREEXISTING_PR2_DATABASE:
+    required_preexisting_database_resources.append(
+        ("PR2 classifier", PR2_CLASSIFIER)
+    )
+
+if required_preexisting_database_resources:
     missing_database_resources = [
-        path
-        for path in [BBSPLIT_DB_DIR]
+        (label, path)
+        for label, path in required_preexisting_database_resources
         if not os.path.exists(path)
     ]
     if missing_database_resources:
-        missing_list = "\n  - ".join(missing_database_resources)
+        missing_list = "\n  - ".join(
+            f"{label}: {path}" for label, path in missing_database_resources
+        )
         raise WorkflowError(
-            "use_preexisting_databases is true, but the following configured "
-            "BBsplit database resources were not found:\n  - "
+            "One or more databases are marked as pre-existing, but the "
+            "following required resources were not found:\n  - "
             + missing_list
-            + "\nSet database_dir to the shared database root that contains "
-            "bbsplit-db/, or set "
-            "use_preexisting_databases to false so the workflow builds them."
+            + "\nCorrect database_dir or mark only the missing database "
+            "family as not pre-existing so the workflow prepares it."
         )
 
 # Small, user-facing files copied into a project-specific folder at the end of

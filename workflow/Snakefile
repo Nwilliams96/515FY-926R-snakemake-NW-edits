@@ -18,7 +18,7 @@ include: "rules/common.smk"
 include: "rules/download_databases.smk"
 include: "rules/prepare_classification_dbs.smk"
 
-if not USE_PREEXISTING_DATABASES:
+if not USE_PREEXISTING_BBSPLIT_DATABASE:
     include: "rules/prepare_bbsplit_db.smk"
 
 include: "rules/00-remove_primers.smk"

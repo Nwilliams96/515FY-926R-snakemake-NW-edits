@@ -109,8 +109,13 @@ shared `database_dir`. After this upgrade, the first run downloads the SILVA
 144 classifier, downloads the approximately 141 MB species reference, and
 builds a QIIME 2 2026.7-labelled PR2 classifier if they are not already present;
 later project clones reuse them. This one-time database setup also occurs when
-`use_preexisting_databases: true`; that setting continues to require and reuse
-the existing BBsplit index rather than rebuilding it.
+the corresponding pre-existing setting is `false`; later project clones reuse
+them. Database families are controlled independently with
+`use_preexisting_bbsplit_database`, `use_preexisting_silva_database`, and
+`use_preexisting_pr2_database`. Marking one as `true` requires its release- and
+primer-compatible files to exist under `database_dir`; marking it as `false`
+allows Snakemake to prepare it if missing. The older
+`use_preexisting_databases` setting remains supported as a BBsplit fallback.
 
 ## DADA2 controls
 
