@@ -89,6 +89,10 @@ Order, Family, or Genus into the wrong columns. The official uniform SILVA
 classifier stops at Genus, so `Species` remains blank for SILVA assignments;
 PR2-derived eukaryotic species labels remain available.
 
+The chloroplast/cyanobacterial subsetting step accepts both the older
+`p__Cyanobacteria` label and SILVA 144's `p__Cyanobacteriota` label, preserving
+those downstream tables across the database transition.
+
 If non-default primers are entered, the workflow uses SILVA's official
 full-length classifier instead of applying the 515Y/926R-specific model to an
 incompatible region. PR2 remains the primary eukaryotic classifier.

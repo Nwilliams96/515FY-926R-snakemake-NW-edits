@@ -45,14 +45,14 @@ qiime taxa filter-table \
 qiime taxa filter-table \
   --i-table ${snakemake_input[proktable]} \
   --i-taxonomy ${snakemake_input[proktax]} \
-  --p-include "p__Cyanobacteria" \
+  --p-include "p__Cyanobacteria,p__Cyanobacteriota" \
   --o-filtered-table ${snakemake_output[onlyalgaetable]} || touch ${snakemake_output[onlyalgaetable]}
 
 #Create Chloroplast-free Cyanobacteria table
 qiime taxa filter-table \
   --i-table ${snakemake_input[proktable]} \
   --i-taxonomy ${snakemake_input[proktax]} \
-  --p-include "p__Cyanobacteria" \
+  --p-include "p__Cyanobacteria,p__Cyanobacteriota" \
   --p-exclude "o__Chloroplast" \
   --o-filtered-table ${snakemake_output[onlycyanotable]} || touch ${snakemake_output[onlycyanotable]}
 
@@ -74,7 +74,7 @@ qiime taxa filter-table \
 qiime taxa filter-table \
   --i-table ${snakemake_input[proktable]} \
   --i-taxonomy ${snakemake_input[proktax]} \
-  --p-exclude "f__Mitochondria,p__Cyanobacteria" \
+  --p-exclude "f__Mitochondria,p__Cyanobacteria,p__Cyanobacteriota" \
   --o-filtered-table ${snakemake_output[nomitonochloronocyanotable]} || touch ${snakemake_output[nomitonochloronocyanotable]}
 
 #Create Archaea-only table

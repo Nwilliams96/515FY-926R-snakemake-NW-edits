@@ -75,6 +75,11 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertNotIn('separate(Taxonomy, c("Domain","Phylum"', source)
         self.assertIn('"Domain", "Kingdom", "Supergroup"', source)
 
+        subset_script = (
+            ROOT / "workflow/scripts/P09b-PR2-reclassify-chloroplasts-split-categories.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("p__Cyanobacteria,p__Cyanobacteriota", subset_script)
+
     def test_new_amplicon_concentration_name_and_isd_ids_reach_outputs(self):
         common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
         merge_rule = (ROOT / "workflow/rules/03-merge-16S-18S.smk").read_text(
