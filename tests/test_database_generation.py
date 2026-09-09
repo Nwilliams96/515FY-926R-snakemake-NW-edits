@@ -50,6 +50,13 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
+        self.assertIn("rule download_pr2:", downloads)
+        self.assertIn('checksum_algorithm="sha256"', downloads)
+        self.assertIn(
+            'checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
+            downloads,
+        )
+        self.assertIn('script:\n        "../scripts/download_verified_reference.py"', downloads)
         self.assertIn("USE_PREEXISTING_BBSPLIT_DATABASE", common)
         self.assertIn("USE_PREEXISTING_SILVA_DATABASE", common)
         self.assertIn("USE_PREEXISTING_PR2_DATABASE", common)
@@ -96,6 +103,13 @@ class DatabaseGenerationTests(unittest.TestCase):
                 DOWNLOAD.download_verified(source.as_uri(), destination, "0" * 32)
             self.assertFalse(destination.exists())
             self.assertFalse(destination.with_name(destination.name + ".part").exists())
+
+            sha_destination = root / "absolute-style" / "reference.fasta.gz"
+            sha_checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+            DOWNLOAD.download_verified(
+                source.as_uri(), sha_destination, sha_checksum, "sha256"
+            )
+            self.assertEqual(sha_destination.read_bytes(), source.read_bytes())
 
     def test_long_data_parser_is_rank_named_and_silva_144_safe(self):
         source = (ROOT / "workflow/scripts/long-data-preparation.R").read_text(

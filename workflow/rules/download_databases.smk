@@ -59,15 +59,15 @@ rule download_pr2:
         "logs/download_pr2.log"
     params:
         url="https://github.com/pr2database/pr2database/releases/download/v5.1.1/pr2_version_5.1.1_SSU_dada2.fasta.gz",
-        extra="--file-allocation none --retry-wait 5 --console-log-level warn --log-level notice",
-    threads: 
-        2
+        checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d",
+        checksum_algorithm="sha256",
+    threads: 1
     resources:
         mem_mb=1024,
         runtime=30,
     priority: 50
-    wrapper:
-        "v7.2.0/utils/aria2c"
+    script:
+        "../scripts/download_verified_reference.py"
 
 rule unzip_pr2:
     input:
