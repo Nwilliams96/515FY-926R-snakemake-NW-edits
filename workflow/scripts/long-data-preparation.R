@@ -109,7 +109,7 @@ counts <- Taxonomy %>%
 # new Kingdom annotation (and future taxonomy columns) cannot be mistaken for
 # sample counts.
 count_annotation_columns <- c(
-  "Domain", "Kingdom", "Supergroup", "Division", "Subdivision", "Phylum",
+  "Taxonomy", "Domain", "Kingdom", "Supergroup", "Division", "Subdivision", "Phylum",
   "Class", "Order", "Family", "Genus", "Species", "ProPortal_ASV_Ecotype",
   "plastid_16S_rRNA", "ASV_hash", "ASV", "Source_database"
 )

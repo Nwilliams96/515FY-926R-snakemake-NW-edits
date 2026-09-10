@@ -123,6 +123,9 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("parse_prefixed_taxonomy", source)
         self.assertNotIn('separate(Taxonomy, c("Domain","Phylum"', source)
         self.assertIn('"Domain", "Kingdom", "Supergroup"', source)
+        self.assertIn(
+            '"Taxonomy", "Domain", "Kingdom", "Supergroup"', source
+        )
 
         subset_script = (
             ROOT / "workflow/scripts/P09b-PR2-reclassify-chloroplasts-split-categories.sh"
