@@ -15,4 +15,5 @@ qiime dada2 denoise-single \
   --o-table ${snakemake_output[euktable]} \
   --o-representative-sequences ${snakemake_output[eukrepseqs]} \
   --o-denoising-stats ${snakemake_output[eukstats]} \
+  --o-base-transition-stats ${snakemake_output[eukbasetransitions]} \
   --verbose

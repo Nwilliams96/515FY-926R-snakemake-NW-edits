@@ -47,6 +47,24 @@ class Dada2ConfigurationTests(unittest.TestCase):
         ):
             self.assertIn(option, euk)
 
+        self.assertIn(
+            "--o-base-transition-stats ${snakemake_output[prokbasetransitions]}",
+            prok,
+        )
+        self.assertIn(
+            "--o-base-transition-stats ${snakemake_output[eukbasetransitions]}",
+            euk,
+        )
+
+        prok_rule = (
+            ROOT / "workflow/rules/02-denoise-and-export-prok.smk"
+        ).read_text(encoding="utf-8")
+        euk_rule = (
+            ROOT / "workflow/rules/02-denoise-and-export-euk.smk"
+        ).read_text(encoding="utf-8")
+        self.assertIn("prokbasetransitions=", prok_rule)
+        self.assertIn("eukbasetransitions=", euk_rule)
+
 
 if __name__ == "__main__":
     unittest.main()

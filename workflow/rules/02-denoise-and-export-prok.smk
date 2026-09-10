@@ -47,7 +47,8 @@ rule denoise_prok_dada2:
         directory("results/02-proks/03-DADA2d/"),
         prokrepseqs="results/02-proks/03-DADA2d/representative_sequences.qza",
         prokstats="results/02-proks/03-DADA2d/denoising_stats.qza",
-        proktable="results/02-proks/03-DADA2d/table.qza"
+        proktable="results/02-proks/03-DADA2d/table.qza",
+        prokbasetransitions="results/02-proks/03-DADA2d/base_transition_stats.qza"
     conda:
         config["qiime2version"]
     threads: 8

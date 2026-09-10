@@ -107,7 +107,8 @@ rule denoise_euk_dada2:
         directory("results/02-euks/08-DADA2d/"),
         eukrepseqs="results/02-euks/08-DADA2d/representative_sequences.qza",
         eukstats="results/02-euks/08-DADA2d/denoising_stats.qza",
-        euktable="results/02-euks/08-DADA2d/table.qza"
+        euktable="results/02-euks/08-DADA2d/table.qza",
+        eukbasetransitions="results/02-euks/08-DADA2d/base_transition_stats.qza"
     conda:
         config["qiime2version"]
     threads: 8
