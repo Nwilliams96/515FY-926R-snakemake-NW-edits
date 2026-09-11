@@ -43,6 +43,17 @@ if (
 SILVA_VERSION = "144"
 config["SILVAversion"] = SILVA_VERSION
 
+# PR2 is now used as an independent plastid screen for every 16S ASV.  A PR2
+# lineage replaces SILVA only when it contains the explicit PR2 plastid marker
+# ":plas" and its classifier confidence meets this threshold.  Keeping the
+# resolver threshold separate from QIIME's classifier threshold gives the
+# audit table enough information to record low-confidence plastid candidates.
+CHLOROPLAST_PR2_MIN_CONFIDENCE = float(
+    config.get("chloroplast_pr2_min_confidence", 0.7)
+)
+if not 0 <= CHLOROPLAST_PR2_MIN_CONFIDENCE <= 1:
+    raise WorkflowError("chloroplast_pr2_min_confidence must be between 0 and 1")
+
 # DADA2 parameters are configurable per marker-gene path. These fallbacks are
 # the values used by the workflow before the controls were exposed, so older
 # study configs remain reproducible after updating the pipeline.
@@ -268,11 +279,19 @@ RESULTS_EXPORT_INPUTS = [
     RESULTS_LONG_DATA,
     "results/04-formatted/" + config["studyName"] + ".asv_sequences.tsv",
     "results/07-report/" + config["studyName"] + ".pipeline-report.html",
+    "results/02-proks/09-subsetting/tax-merged/"
+    + config["studyName"]
+    + ".PR2-plastid-routing-audit.tsv",
+    "results/02-proks/09-subsetting/tax-merged/"
+    + config["studyName"]
+    + ".PR2-plastid-routing-summary.tsv",
 ]
 RESULTS_EXPORT_OUTPUTS = [
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".long_data.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".asv_sequences.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".pipeline-report.html",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv",
 ]
 RESULTS_EXPORT_SUMMARIES = [
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".phylum_summary.tsv",
@@ -327,8 +346,10 @@ def get_final_output():
     final_output.append("results/02-proks/04-DADA2d-plaintext-exports"),
     final_output.append("results/02-proks/05-classified"),
     final_output.append("results/02-proks/07-SILVA-only-barplots/"),
-    final_output.append("results/02-proks/09-subsetting/split-seqs/exclude_o__Chloroplast_subset_filtered_seqs.qza"),
-    final_output.append("results/02-proks/09-subsetting/reclassified/include_o__Chloroplast_subset_reclassified_PR2.qza"),
+    final_output.append("results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".all-16S-seqs.with-tax.tsv"),
     final_output.append("results/02-proks/sample-metadata.tsv"),

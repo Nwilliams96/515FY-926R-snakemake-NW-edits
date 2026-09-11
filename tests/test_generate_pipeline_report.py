@@ -84,6 +84,21 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "5\t4\t3\t2\t1\t1\n",
                 encoding="utf-8",
             )
+            (root / "chloroplast-summary.tsv").write_text(
+                "PR2_min_confidence\ttotal_16S_ASVs\tSILVA_chloroplast_ASVs\t"
+                "PR2_plastid_ASVs_any_confidence\tPR2_plastid_ASVs_accepted\t"
+                "PR2_confirmed_SILVA_ASVs\tPR2_rescued_ASVs\t"
+                "SILVA_chloroplast_unconfirmed_ASVs\t"
+                "PR2_low_confidence_not_accepted_ASVs\tSILVA_retained_ASVs\n"
+                "0.7\t5\t1\t3\t2\t1\t1\t0\t1\t2\n",
+                encoding="utf-8",
+            )
+            (root / "chloroplast-audit.tsv").write_text(
+                "ASV_hash\tChloroplast_detection_source\n"
+                "A3\tPR2_confirmed_SILVA\n"
+                "A1\tPR2_rescue\n",
+                encoding="utf-8",
+            )
             (root / "S_1.qc.txt").write_text(
                 "Total read pairs processed:              1,250\n"
                 "Pairs written (passing filters):          1,100 (88.0%)\n",
@@ -134,6 +149,8 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "stats18s": root / "18.tsv",
                     "correction_factors": root / "correction-factors.tsv",
                     "species_assignment": root / "species-assignment.tsv",
+                    "chloroplast_audit": root / "chloroplast-audit.tsv",
+                    "chloroplast_summary": root / "chloroplast-summary.tsv",
                     "cutadapt_qc": [root / "S_1.qc.txt"],
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
@@ -191,6 +208,10 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("SILVA 144 species matching", rendered)
             self.assertIn("unambiguous exact matches", rendered)
             self.assertIn("2</strong><span>species labels added", rendered)
+            self.assertIn("PR2 plastid cross-check", rendered)
+            self.assertIn("plastid ASVs rescued by PR2", rendered)
+            self.assertIn("600</strong><span>abundance assigned to rescued ASVs", rendered)
+            self.assertIn("PR2 plastid calls accepted at confidence ≥ 0.7", rendered)
             self.assertIn("0.714286", rendered)
             self.assertIn("1.66667", rendered)
             self.assertIn("max_ee_f", rendered)

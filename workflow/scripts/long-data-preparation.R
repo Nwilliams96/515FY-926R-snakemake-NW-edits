@@ -58,10 +58,17 @@ parse_prefixed_taxonomy <- function(taxonomy_table) {
 }
 
 # Parse out plastid labels to record whether a sequence came from a plastid.
+# Confident PR2 calls contain :plas.  A SILVA o__Chloroplast label is retained
+# when PR2 does not make a confident plastid call, so recognize both forms.
 Taxonomy <- counts %>%
   select(Taxonomy, ProPortal_ASV_Ecotype, ASV_hash)
 Taxonomy <- Taxonomy %>%
-  mutate(plastid_16S_rRNA = case_when(str_detect(Taxonomy, ":plas") ~ "yes", TRUE ~ "no"))
+  mutate(
+    plastid_16S_rRNA = case_when(
+      str_detect(Taxonomy, regex(":plas|(?:^|;\\s*)o__Chloroplast(?:\\s*;|\\s*$)", ignore_case = TRUE)) ~ "yes",
+      TRUE ~ "no"
+    )
+  )
 Taxonomy <- Taxonomy %>% 
   mutate(Source_database = case_when(str_detect(Taxonomy, "d__") ~ "SILVA", TRUE ~ "PR2"))
 
@@ -160,14 +167,19 @@ Check <- asv_long %>%
   group_by(SampleID) %>% 
   summarise(Check = sum(Relative_Abundance))
 
-#Make Sequence Type Column
-asv_long <- asv_long %>% mutate(Plas_Domain = paste(plastid_16S_rRNA, Domain, sep = "_"))
-Prokaryotic_16S <- asv_long %>% filter(Plas_Domain %in% c("no_Bacteria","no_Archaea")) %>% mutate(Sequence_Type = "Prokaryotic_16S")
-Chloroplast_16S <- asv_long %>% filter(Plas_Domain %in% c("yes_Eukaryota"))  %>% mutate(Sequence_Type = "Chloroplast_16S")
-Eukaryote_18S   <- asv_long %>% filter(Plas_Domain %in% c("no_Eukaryota"))  %>% mutate(Sequence_Type = "Eukaryote_18S")
-Unassigned      <- asv_long %>% filter(Plas_Domain %in% c("no_Unassigned"))  %>% mutate(Sequence_Type = "Unassigned")
-
-asv_long <- bind_rows(Prokaryotic_16S,Chloroplast_16S,Eukaryote_18S,Unassigned)
+#Make Sequence Type Column.  Plastid status takes priority over Domain because
+# SILVA chloroplast lineages can retain d__Bacteria while PR2 plastid lineages
+# normally resolve to Eukaryota.
+asv_long <- asv_long %>%
+  mutate(
+    Sequence_Type = case_when(
+      plastid_16S_rRNA == "yes" ~ "Chloroplast_16S",
+      Domain %in% c("Bacteria", "Archaea") ~ "Prokaryotic_16S",
+      Domain == "Eukaryota" ~ "Eukaryote_18S",
+      is.na(Domain) | Domain == "" | Domain == "Unassigned" ~ "Unassigned",
+      TRUE ~ "Unassigned"
+    )
+  )
 
 #Tidy order of columns and what's included in final sheet
 asv_long <- asv_long %>% 

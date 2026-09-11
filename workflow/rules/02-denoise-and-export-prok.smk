@@ -121,30 +121,46 @@ rule make_SILVA_only_prok_barplots:
     script:
         "../scripts/P07-make-barplot.sh"
 
-rule splitchloroplasts:
+rule classify_all_16S_with_PR2:
+    input:
+        PR2classifier=PR2_CLASSIFIER,
+        prokseqs=rules.denoise_prok_dada2.output.prokrepseqs,
+    output:
+        classified="results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza",
+    threads: 8
+    resources:
+        mem_mb=64000,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-classify-all-16S-with-PR2.log"
+    script:
+        "../scripts/P09a-classify-all-16S-with-PR2.sh"
+
+rule resolve_PR2_plastids:
+    input:
+        silva_taxonomy=rules.classify_ASVs.output.classified,
+        pr2_taxonomy=rules.classify_all_16S_with_PR2.output.classified,
+    output:
+        taxonomy="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza",
+        audit="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
+        summary="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv",
+    params:
+        min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-resolve-PR2-plastids.log"
+    script:
+        "../scripts/resolve_pr2_plastids.py"
+
+rule split_resolved_prok_categories:
     input:
         proktable=rules.denoise_prok_dada2.output.proktable,
-        proktax=rules.classify_ASVs.output.classified,
-        prokseqs=rules.denoise_prok_dada2.output.prokrepseqs
+        resolved_taxonomy=rules.resolve_PR2_plastids.output.taxonomy,
     output:
         includechlorotable="results/02-proks/09-subsetting/split-tables/include_o__Chloroplast_filtered_table.qza",
         excludechlorotable="results/02-proks/09-subsetting/split-tables/exclude_o__Chloroplast_filtered_table.qza",
-        includechloroseqs="results/02-proks/09-subsetting/split-seqs/include_o__Chloroplast_subset_filtered_subset_filtered_seqs.qza",
-        excludechloroseqs="results/02-proks/09-subsetting/split-seqs/exclude_o__Chloroplast_subset_filtered_seqs.qza"
-    conda:
-        config["qiime2version"]
-    script:
-        "../scripts/P09a-split-chloroplast.sh"
-
-rule reclassify_chloro_split_tables:
-    input:
-        PR2classifier=PR2_CLASSIFIER,
-        proktable=rules.denoise_prok_dada2.output.proktable,
-        proktax=rules.classify_ASVs.output.classified,
-        includechloroseqs=rules.splitchloroplasts.output.includechloroseqs
-    output:
-        PR2classifiedchloroseqs="results/02-proks/09-subsetting/reclassified/include_o__Chloroplast_subset_reclassified_PR2.qza",
-        mergedclass="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza",
         onlymitotable="results/02-proks/09-subsetting/split-tables/include_f__Mitochondria_filtered_table.qza",
         onlyalgaetable="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_NOTE_includes_chloroplasts_filtered_table.qza",
         onlycyanotable="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_exclude_o__Chloroplast_filtered_table.qza",
@@ -153,16 +169,14 @@ rule reclassify_chloro_split_tables:
         nomitonochloronocyanotable="results/02-proks/09-subsetting/split-tables/exclude_p__Cyanobacteria_exclude_f__Mitochondria_NOTE_excludes_chloroplasts_filtered_table.qza",
         onlyarchaeatable="results/02-proks/09-subsetting/split-tables/include_d__Archaea_filtered_table.qza",
         noarchaeatable="results/02-proks/09-subsetting/split-tables/exclude_d__Archaea_filtered_table.qza" 
-    params:
-        studyName=config["studyName"]
     conda:
         config["qiime2version"]
     script:
-        "../scripts/P09b-PR2-reclassify-chloroplasts-split-categories.sh"
+        "../scripts/P09b-split-resolved-prok-categories.sh"
 
 rule export_tax_convert_biom:
     input:
-        mergedtax=rules.reclassify_chloro_split_tables.output.mergedclass,
+        mergedtax=rules.resolve_PR2_plastids.output.taxonomy,
         all16Stable="results/02-proks/03-DADA2d/table.qza",
         noarch="results/02-proks/09-subsetting/split-tables/exclude_d__Archaea_filtered_table.qza",
         nomito="results/02-proks/09-subsetting/split-tables/exclude_f__Mitochondria_filtered_table.qza",

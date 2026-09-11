@@ -958,6 +958,50 @@ def species_assignment_table(rows):
     )
 
 
+def chloroplast_resolution_table(summary_rows, audit_rows, long_rows, abundance_column):
+    if not summary_rows:
+        return '<p class="small-muted">PR2 plastid-screening results were not available.</p>'
+
+    summary = summary_rows[0]
+    abundance_by_asv = Counter()
+    samples_by_asv = defaultdict(set)
+    for row in long_rows:
+        asv = (row.get("ASV_hash") or "").strip()
+        sample = normalize_sample_id(row.get("SampleID"))
+        abundance = number(row.get(abundance_column)) or 0
+        if asv and abundance > 0:
+            abundance_by_asv[asv] += abundance
+            if sample:
+                samples_by_asv[asv].add(sample)
+
+    rescued = {
+        row.get("ASV_hash")
+        for row in audit_rows
+        if row.get("Chloroplast_detection_source") == "PR2_rescue"
+    }
+    rescued.discard(None)
+    rescued_abundance = sum(abundance_by_asv[asv] for asv in rescued)
+    rescued_samples = set().union(*(samples_by_asv[asv] for asv in rescued)) if rescued else set()
+
+    return (
+        '<div class="cards">'
+        f'<div class="card"><strong>{fmt_count(summary.get("total_16S_ASVs"))}</strong><span>16S ASVs screened with PR2</span></div>'
+        f'<div class="card"><strong>{fmt_count(summary.get("PR2_plastid_ASVs_accepted"))}</strong><span>confident PR2 plastid ASVs</span></div>'
+        f'<div class="card"><strong>{fmt_count(summary.get("PR2_confirmed_SILVA_ASVs"))}</strong><span>confirmed SILVA chloroplast ASVs</span></div>'
+        f'<div class="card"><strong>{fmt_count(summary.get("PR2_rescued_ASVs"))}</strong><span>plastid ASVs rescued by PR2</span></div>'
+        f'<div class="card"><strong>{fmt_count(rescued_abundance)}</strong><span>abundance assigned to rescued ASVs</span></div>'
+        f'<div class="card"><strong>{len(rescued_samples):,}</strong><span>samples containing rescued ASVs</span></div>'
+        '</div>'
+        '<div class="table-wrap"><table><thead><tr><th>Decision</th><th>ASVs</th></tr></thead><tbody>'
+        f'<tr><td>PR2 plastid calls at any confidence</td><td>{fmt_count(summary.get("PR2_plastid_ASVs_any_confidence"))}</td></tr>'
+        f'<tr><td>PR2 plastid calls accepted at confidence ≥ {esc(summary.get("PR2_min_confidence"))}</td><td>{fmt_count(summary.get("PR2_plastid_ASVs_accepted"))}</td></tr>'
+        f'<tr><td>PR2-rescued plastids not called chloroplast by SILVA</td><td>{fmt_count(summary.get("PR2_rescued_ASVs"))}</td></tr>'
+        f'<tr><td>SILVA chloroplast calls not confirmed by PR2</td><td>{fmt_count(summary.get("SILVA_chloroplast_unconfirmed_ASVs"))}</td></tr>'
+        f'<tr><td>Low-confidence PR2 plastid candidates not accepted</td><td>{fmt_count(summary.get("PR2_low_confidence_not_accepted_ASVs"))}</td></tr>'
+        '</tbody></table></div>'
+    )
+
+
 def render_report(config, paths, output_path):
     sample_rows = read_tsv(paths["samples"])
     sample_names = [first_value(row, ["sample", "sample-id", "sampleid"]) for row in sample_rows]
@@ -994,6 +1038,16 @@ def render_report(config, paths, output_path):
         else []
     )
     species_assignment_html = species_assignment_table(species_assignment_rows)
+    chloroplast_audit_rows = (
+        read_tsv(paths["chloroplast_audit"])
+        if paths.get("chloroplast_audit") and Path(paths["chloroplast_audit"]).is_file()
+        else []
+    )
+    chloroplast_summary_rows = (
+        read_tsv(paths["chloroplast_summary"])
+        if paths.get("chloroplast_summary") and Path(paths["chloroplast_summary"]).is_file()
+        else []
+    )
 
     internal_table_paths = [
         path for path in paths.get("internal_standard_table", []) if Path(path).is_file()
@@ -1013,6 +1067,12 @@ def render_report(config, paths, output_path):
     abundance_column = "Corrected_Sequence_Counts"
     if long_rows and abundance_column not in long_rows[0]:
         abundance_column = "Raw_Sequence_Counts"
+    chloroplast_resolution_html = chloroplast_resolution_table(
+        chloroplast_summary_rows,
+        chloroplast_audit_rows,
+        long_rows,
+        abundance_column,
+    )
     taxonomy_explorer_data = build_taxonomy_explorer_data(
         sample_rows, long_rows, abundance_column
     )
@@ -1206,7 +1266,7 @@ details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
-<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}<h3>SILVA 144 species matching</h3><p>Species labels are added only when a genus-classified SILVA 16S ASV has an unambiguous exact sequence match in SILVA 144 and the matched genus agrees with the QIIME 2 genus assignment. A blank Species value can mean that no exact match was found, the exact match was ambiguous, or the genus checks disagreed; it does not mean that the ASV has no close relatives.</p>{species_assignment_html}<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
+<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}<h3>SILVA 144 species matching</h3><p>Species labels are added only when a genus-classified SILVA 16S ASV has an unambiguous exact sequence match in SILVA 144 and the matched genus agrees with the QIIME 2 genus assignment. A blank Species value can mean that no exact match was found, the exact match was ambiguous, or the genus checks disagreed; it does not mean that the ASV has no close relatives.</p>{species_assignment_html}<h3>PR2 plastid cross-check</h3><p>Every unique 16S ASV was independently classified with PR2. PR2 replaces SILVA only when the PR2 lineage contains the explicit <code>:plas</code> marker and meets the configured confidence threshold. This can rescue chloroplast ASVs that SILVA 144 placed among bacteria while preserving SILVA for all non-plastid calls. The complete per-ASV decision table is included in Results-Export.</p>{chloroplast_resolution_html}<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy bar plot</h2><p>This QIIME 2-style view shows each sample as a 100% stacked bar. Choose a taxonomy level, then order the bars by SampleID, Condition, Latitude, Longitude, or Depth. When a metadata variable is selected, you can optionally display only one value. Counts use <code>{esc(abundance_column)}</code>; hover over a colored segment for its taxon, relative abundance, and count.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div><div class="explorer-control"><label for="taxonomy-plot-field">Plot samples by</label><select id="taxonomy-plot-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Filter plotted value</label><select id="taxonomy-metadata-value"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Interactive relative taxonomic abundance by sample"></div><div id="taxonomy-explorer-legend" class="chart-legend" aria-label="Taxonomy legend"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive controls require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
@@ -1225,6 +1285,8 @@ def run_from_snakemake(snakemake_object):
         "stats18s": str(snakemake_object.input.stats18s),
         "correction_factors": str(snakemake_object.input.correction_factors),
         "species_assignment": str(snakemake_object.input.species_assignment),
+        "chloroplast_audit": str(snakemake_object.input.chloroplast_audit),
+        "chloroplast_summary": str(snakemake_object.input.chloroplast_summary),
         "cutadapt_qc": list(snakemake_object.input.cutadapt_qc),
         "long_data": str(snakemake_object.input.long_data),
         "internal_standard_figures": list(
