@@ -448,6 +448,8 @@ def flatten_config(config, prefix=""):
 def effective_dada2_parameters(config):
     """Return every user-facing DADA2 setting, including legacy defaults."""
     prok = {
+        "trunc_len_f": 0,
+        "trunc_len_r": 0,
         "max_ee_f": 2.0,
         "max_ee_r": 2.0,
         "trunc_q": 2,
@@ -473,8 +475,8 @@ def effective_dada2_parameters(config):
     trunc = config.get("trunclens", {}) or {}
 
     return [
-        ("16S paired", "trunc_len_f", trunc.get("truncR1", "—"), "Forward bases retained"),
-        ("16S paired", "trunc_len_r", trunc.get("truncR2", "—"), "Reverse bases retained"),
+        ("16S paired", "trunc_len_f", prok["trunc_len_f"], "Fixed forward-read truncation length; 0 disables fixed-length truncation"),
+        ("16S paired", "trunc_len_r", prok["trunc_len_r"], "Fixed reverse-read truncation length; 0 disables fixed-length truncation"),
         ("16S paired", "max_ee_f", prok["max_ee_f"], "Maximum expected errors in a forward read"),
         ("16S paired", "max_ee_r", prok["max_ee_r"], "Maximum expected errors in a reverse read"),
         ("16S paired", "trunc_q", prok["trunc_q"], "Quality score that triggers read truncation"),
