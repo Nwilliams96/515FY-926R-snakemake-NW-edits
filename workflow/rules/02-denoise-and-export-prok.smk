@@ -33,8 +33,8 @@ rule denoise_prok_dada2:
     input:
         "results/02-proks/16S.qza"
     params:
-        truncR1=config["trunclens"]["truncR1"],
-        truncR2=config["trunclens"]["truncR2"],
+        truncR1=DADA2_PROK["trunc_len_f"],
+        truncR2=DADA2_PROK["trunc_len_r"],
         max_ee_f=DADA2_PROK["max_ee_f"],
         max_ee_r=DADA2_PROK["max_ee_r"],
         trunc_q=DADA2_PROK["trunc_q"],

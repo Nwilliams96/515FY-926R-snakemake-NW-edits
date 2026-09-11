@@ -51,6 +51,8 @@ DADA2_PROK_CONFIG = DADA2_CONFIG.get("prokaryotes", {})
 DADA2_EUK_CONFIG = DADA2_CONFIG.get("eukaryotes", {})
 
 DADA2_PROK_DEFAULTS = {
+    "trunc_len_f": 0,
+    "trunc_len_r": 0,
     "max_ee_f": 2.0,
     "max_ee_r": 2.0,
     "trunc_q": 2,
