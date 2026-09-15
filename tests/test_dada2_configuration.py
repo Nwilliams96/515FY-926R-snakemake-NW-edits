@@ -9,8 +9,8 @@ class Dada2ConfigurationTests(unittest.TestCase):
     def test_historical_defaults_are_declared(self):
         common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
         for setting in (
-            '"trunc_len_f": 0',
-            '"trunc_len_r": 0',
+            '"trunc_len_f": 220',
+            '"trunc_len_r": 180',
             '"max_ee_f": 2.0',
             '"max_ee_r": 2.0',
             '"trunc_q": 2',
