@@ -68,6 +68,9 @@ DADA2_PROK_DEFAULTS = {
     "max_ee_r": 2.0,
     "trunc_q": 2,
     "min_overlap": 12,
+    "max_merge_mismatch": 0,
+    "trim_overhang": False,
+    "retain_unmerged": False,
     "pooling_method": "independent",
     "chimera_method": "consensus",
     "min_fold_parent_over_abundance": 1.0,
@@ -84,6 +87,7 @@ DADA2_EUK_DEFAULTS = {
 
 DADA2_PROK = {**DADA2_PROK_DEFAULTS, **DADA2_PROK_CONFIG}
 DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
+RUN_UNMERGED_16S_RESCUE = bool(DADA2_PROK["retain_unmerged"])
 
 # New configs store internal standards as an ordered YAML list. Continue to
 # accept the older intstd1/intstd2/intstd3 mapping so existing studies remain
@@ -299,6 +303,24 @@ RESULTS_EXPORT_SUMMARIES = [
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".phylum_summary.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".order_summary.tsv",
 ]
+UNMERGED_16S_TABLE = (
+    "results/02-proks/11-unmerged-16S-rescue/"
+    + config["studyName"]
+    + ".unmerged_linked_16S.tsv"
+)
+UNMERGED_16S_SUMMARY = (
+    "results/02-proks/11-unmerged-16S-rescue/"
+    + config["studyName"]
+    + ".unmerged_linked_16S_summary.tsv"
+)
+if RUN_UNMERGED_16S_RESCUE:
+    RESULTS_EXPORT_INPUTS.extend([UNMERGED_16S_TABLE, UNMERGED_16S_SUMMARY])
+    RESULTS_EXPORT_OUTPUTS.extend(
+        [
+            RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".unmerged_linked_16S.tsv",
+            RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".unmerged_linked_16S_summary.tsv",
+        ]
+    )
 if USE_INTERNAL_STANDARDS:
     RESULTS_EXPORT_INPUTS.append(ISD_CORRECTED_LONG_TABLE)
     RESULTS_EXPORT_OUTPUTS.append(
@@ -377,6 +399,8 @@ def get_final_output():
     )
     if USE_INTERNAL_STANDARDS:
         final_output.append(ISD_CORRECTED_LONG_TABLE)
+    if RUN_UNMERGED_16S_RESCUE:
+        final_output.extend([UNMERGED_16S_TABLE, UNMERGED_16S_SUMMARY])
 
     final_output.extend(RESULTS_EXPORT_OUTPUTS)
     final_output.extend(RESULTS_EXPORT_SUMMARIES)

@@ -131,6 +131,29 @@ The displayed presets reproduce the pipeline's historical settings. Configs
 created before this block was introduced remain supported through matching
 workflow defaults.
 
+The experimental `codex/unmerged-16s-test` branch can also run a parallel
+linked-read sensitivity analysis:
+
+```yaml
+dada2:
+  prokaryotes:
+    trunc_len_f: 220
+    trunc_len_r: 180
+    max_merge_mismatch: 0
+    trim_overhang: false
+    retain_unmerged: true
+```
+
+The canonical 16S analysis still requires merging and is not changed by this
+switch. When `retain_unmerged` is true, a second DADA2 run retains linked
+forward/reverse pairs, and features unique to that run are exported separately
+as `<study>.unmerged_linked_16S.tsv` and
+`<study>.unmerged_linked_16S_summary.tsv`. Both files are copied into the
+project-named Results-Export folder. The linked supplement is intentionally
+excluded from ordinary abundance, richness, report bar plots, and internal-
+standard correction because linked pairs are not directly interchangeable
+with merged ASVs and automatic combination could double-count features.
+
 ## USC CARC runner
 
 `run_snakemake_USC_CARC_only.sh` requests one eight-core, 128 GB CARC job and

@@ -99,6 +99,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "A1\tPR2_rescue\n",
                 encoding="utf-8",
             )
+            (root / "unmerged-summary.tsv").write_text(
+                "standard_non_chimeric_16S_reads\tretained_run_non_chimeric_16S_reads\t"
+                "supplemental_unmerged_16S_features\tsupplemental_unmerged_16S_reads\t"
+                "samples_with_supplemental_reads\tsupplemental_chloroplast_features\t"
+                "supplemental_chloroplast_reads\tinterpretation\n"
+                "600\t675\t3\t75\t1\t1\t20\tExperimental supplement\n",
+                encoding="utf-8",
+            )
             (root / "S_1.qc.txt").write_text(
                 "Total read pairs processed:              1,250\n"
                 "Pairs written (passing filters):          1,100 (88.0%)\n",
@@ -155,6 +163,7 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
                     "internal_standard_table": [root / "corrected.tsv"],
+                    "unmerged_16s_summary": [root / "unmerged-summary.tsv"],
                 },
                 output,
             )
@@ -219,6 +228,11 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("<code>3.5</code>", rendered)
             self.assertIn("<code>4.5</code>", rendered)
             self.assertIn("min_overlap", rendered)
+            self.assertIn("max_merge_mismatch", rendered)
+            self.assertIn("retain_unmerged", rendered)
+            self.assertIn("Unmerged 16S linked-read rescue", rendered)
+            self.assertIn("3</strong><span>supplemental linked features", rendered)
+            self.assertIn("not</strong> included in the canonical ASV table", rendered)
             self.assertIn("n_reads_learn", rendered)
             self.assertNotIn("Median base-quality profiles", rendered)
             self.assertNotIn("Where reads were retained or lost", rendered)

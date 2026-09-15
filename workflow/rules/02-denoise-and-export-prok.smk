@@ -39,6 +39,9 @@ rule denoise_prok_dada2:
         max_ee_r=DADA2_PROK["max_ee_r"],
         trunc_q=DADA2_PROK["trunc_q"],
         min_overlap=DADA2_PROK["min_overlap"],
+        max_merge_mismatch=DADA2_PROK["max_merge_mismatch"],
+        trim_overhang=DADA2_PROK["trim_overhang"],
+        retain_unmerged=False,
         pooling_method=DADA2_PROK["pooling_method"],
         chimera_method=DADA2_PROK["chimera_method"],
         min_fold_parent_over_abundance=DADA2_PROK["min_fold_parent_over_abundance"],
@@ -58,6 +61,90 @@ rule denoise_prok_dada2:
         "logs/02-denoise-and-export-prok/03-DADA2/DADA2.stderrout"
     script:
         "../scripts/P03-DADA2.sh"
+
+rule denoise_prok_dada2_with_unmerged:
+    input:
+        "results/02-proks/16S.qza"
+    params:
+        truncR1=DADA2_PROK["trunc_len_f"],
+        truncR2=DADA2_PROK["trunc_len_r"],
+        max_ee_f=DADA2_PROK["max_ee_f"],
+        max_ee_r=DADA2_PROK["max_ee_r"],
+        trunc_q=DADA2_PROK["trunc_q"],
+        min_overlap=DADA2_PROK["min_overlap"],
+        max_merge_mismatch=DADA2_PROK["max_merge_mismatch"],
+        trim_overhang=DADA2_PROK["trim_overhang"],
+        retain_unmerged=True,
+        pooling_method=DADA2_PROK["pooling_method"],
+        chimera_method=DADA2_PROK["chimera_method"],
+        min_fold_parent_over_abundance=DADA2_PROK["min_fold_parent_over_abundance"],
+        n_reads_learn=DADA2_PROK["n_reads_learn"]
+    output:
+        directory("results/02-proks/03-DADA2d-with-unmerged/"),
+        prokrepseqs="results/02-proks/03-DADA2d-with-unmerged/representative_sequences.qza",
+        prokstats="results/02-proks/03-DADA2d-with-unmerged/denoising_stats.qza",
+        proktable="results/02-proks/03-DADA2d-with-unmerged/table.qza",
+        prokbasetransitions="results/02-proks/03-DADA2d-with-unmerged/base_transition_stats.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=96000,
+    log:
+        "logs/02-denoise-and-export-prok/03_DADA2_with_unmerged/DADA2.stderrout"
+    script:
+        "../scripts/P03-DADA2.sh"
+
+rule classify_unmerged_16S_with_SILVA:
+    input:
+        sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        classDB=SILVA_CLASSIFIER,
+    output:
+        classified="results/02-proks/11-unmerged-16S-rescue/SILVA.classified.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
+    log:
+        "logs/02-denoise-and-export-prok/11-unmerged-SILVA.log"
+    script:
+        "../scripts/P05-classify-eASVs.sh"
+
+rule classify_unmerged_16S_with_PR2:
+    input:
+        sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        classDB=PR2_CLASSIFIER,
+    output:
+        classified="results/02-proks/11-unmerged-16S-rescue/PR2.classified.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
+    log:
+        "logs/02-denoise-and-export-prok/11-unmerged-PR2.log"
+    script:
+        "../scripts/P05-classify-eASVs.sh"
+
+rule export_unmerged_16S_supplement:
+    input:
+        retained_table=rules.denoise_prok_dada2_with_unmerged.output.proktable,
+        standard_table=rules.denoise_prok_dada2.output.proktable,
+        retained_sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        silva_taxonomy=rules.classify_unmerged_16S_with_SILVA.output.classified,
+        pr2_taxonomy=rules.classify_unmerged_16S_with_PR2.output.classified,
+    output:
+        table=UNMERGED_16S_TABLE,
+        summary=UNMERGED_16S_SUMMARY,
+    params:
+        min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-unmerged-16S.log"
+    script:
+        "../scripts/export_unmerged_16S.py"
 
 rule export_DADA2_results:
     input:
