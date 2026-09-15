@@ -448,8 +448,8 @@ def flatten_config(config, prefix=""):
 def effective_dada2_parameters(config):
     """Return every user-facing DADA2 setting, including legacy defaults."""
     prok = {
-        "trunc_len_f": 0,
-        "trunc_len_r": 0,
+        "trunc_len_f": 220,
+        "trunc_len_r": 180,
         "max_ee_f": 2.0,
         "max_ee_r": 2.0,
         "trunc_q": 2,
