@@ -70,7 +70,6 @@ DADA2_PROK_DEFAULTS = {
     "min_overlap": 12,
     "max_merge_mismatch": 0,
     "trim_overhang": False,
-    "retain_unmerged": False,
     "pooling_method": "independent",
     "chimera_method": "consensus",
     "min_fold_parent_over_abundance": 1.0,
@@ -87,7 +86,11 @@ DADA2_EUK_DEFAULTS = {
 
 DADA2_PROK = {**DADA2_PROK_DEFAULTS, **DADA2_PROK_CONFIG}
 DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
-RUN_UNMERGED_16S_RESCUE = bool(DADA2_PROK["retain_unmerged"])
+# Always create the linked-read sensitivity output alongside the canonical
+# merged-ASV analysis. This is deliberately not a user-facing config option:
+# the linked features stay separate and are never added automatically to the
+# canonical abundance, richness, taxonomy, or internal-standard outputs.
+RUN_UNMERGED_16S_RESCUE = True
 
 # New configs store internal standards as an ordered YAML list. Continue to
 # accept the older intstd1/intstd2/intstd3 mapping so existing studies remain

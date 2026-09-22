@@ -131,22 +131,11 @@ The displayed presets reproduce the pipeline's historical settings. Configs
 created before this block was introduced remain supported through matching
 workflow defaults.
 
-The experimental `codex/unmerged-16s-test` branch can also run a parallel
-linked-read sensitivity analysis:
-
-```yaml
-dada2:
-  prokaryotes:
-    trunc_len_f: 220
-    trunc_len_r: 180
-    max_merge_mismatch: 0
-    trim_overhang: false
-    retain_unmerged: true
-```
-
-The canonical 16S analysis still requires merging and is not changed by this
-switch. When `retain_unmerged` is true, a second DADA2 run retains linked
-forward/reverse pairs, and features unique to that run are exported separately
+The workflow automatically runs a parallel linked-read sensitivity analysis;
+users do not need to enable it in the config or tutorial. The canonical 16S
+analysis still requires merging and is not changed by the supplemental pass.
+A second DADA2 run retains linked forward/reverse pairs, and features unique to
+that run are exported separately
 as `<study>.unmerged_linked_16S.tsv` and
 `<study>.unmerged_linked_16S_summary.tsv`. Both files are copied into the
 project-named Results-Export folder. The linked supplement is intentionally

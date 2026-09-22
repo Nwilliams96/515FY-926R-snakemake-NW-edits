@@ -17,7 +17,6 @@ class Dada2ConfigurationTests(unittest.TestCase):
             '"min_overlap": 12',
             '"max_merge_mismatch": 0',
             '"trim_overhang": False',
-            '"retain_unmerged": False',
             '"max_ee": 2.0',
             '"trunc_q": 0',
             '"pooling_method": "independent"',
@@ -25,6 +24,9 @@ class Dada2ConfigurationTests(unittest.TestCase):
             '"n_reads_learn": 1000000',
         ):
             self.assertIn(setting, common)
+
+        self.assertIn("RUN_UNMERGED_16S_RESCUE = True", common)
+        self.assertNotIn('DADA2_PROK["retain_unmerged"]', common)
 
     def test_configurable_values_reach_both_dada2_commands(self):
         prok = (ROOT / "workflow/scripts/P03-DADA2.sh").read_text(encoding="utf-8")

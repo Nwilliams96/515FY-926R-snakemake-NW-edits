@@ -456,7 +456,6 @@ def effective_dada2_parameters(config):
         "min_overlap": 12,
         "max_merge_mismatch": 0,
         "trim_overhang": False,
-        "retain_unmerged": False,
         "pooling_method": "independent",
         "chimera_method": "consensus",
         "min_fold_parent_over_abundance": 1.0,
@@ -486,7 +485,6 @@ def effective_dada2_parameters(config):
         ("16S paired", "min_overlap", prok["min_overlap"], "Minimum overlap required to merge a read pair"),
         ("16S paired", "max_merge_mismatch", prok["max_merge_mismatch"], "Maximum mismatches allowed while merging paired reads"),
         ("16S supplemental", "trim_overhang", prok["trim_overhang"], "Trim non-overlapping tails before testing a pair for merging"),
-        ("16S supplemental", "retain_unmerged", prok["retain_unmerged"], "Run the experimental linked-pair rescue and export its results separately"),
         ("16S paired", "pooling_method", prok["pooling_method"], "Sample pooling used during ASV inference"),
         ("16S paired", "chimera_method", prok["chimera_method"], "Chimera-detection strategy"),
         ("16S paired", "min_fold_parent_over_abundance", prok["min_fold_parent_over_abundance"], "Minimum parent abundance used for chimera detection"),
@@ -1252,7 +1250,7 @@ def render_report(config, paths, output_path):
         unmerged_section = f"""
         <section id="unmerged-16s">
           <div class="eyebrow">Experimental supplement</div><h2>Unmerged 16S linked-read rescue</h2>
-          <p>A second DADA2 pass retained denoised read pairs that failed normal merging. Features unique to that pass were classified with SILVA and PR2 and written to a separate wide table. They are <strong>not</strong> included in the canonical ASV table, richness totals, taxonomic bar plots, or internal-standard correction, which prevents automatic double-counting.</p>
+          <p>The workflow automatically runs a second DADA2 pass that retains denoised read pairs that failed normal merging. Features unique to that pass were classified with SILVA and PR2 and written to a separate wide table. They are <strong>not</strong> included in the canonical ASV table, richness totals, taxonomic bar plots, or internal-standard correction, which prevents automatic double-counting.</p>
           <div class="cards">
             <div class="card"><strong>{fmt_count(rescue.get("supplemental_unmerged_16S_features"))}</strong><span>supplemental linked features</span></div>
             <div class="card"><strong>{fmt_count(rescue.get("supplemental_unmerged_16S_reads"))}</strong><span>reads represented in supplement</span></div>
