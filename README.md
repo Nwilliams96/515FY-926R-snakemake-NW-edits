@@ -121,6 +121,14 @@ primer-compatible files to exist under `database_dir`; marking it as `false`
 allows Snakemake to prepare it if missing. The older
 `use_preexisting_databases` setting remains supported as a BBsplit fallback.
 
+PR2 construction is safe across simultaneous project runs. A filesystem lock
+allows only one run to build a missing classifier, all intermediate artifacts
+are written in a private staging directory, and the completed classifier is
+published to `database_dir` with one atomic rename. Other runs wait for the
+lock and then reuse the validated classifier. Each project records only a local
+readiness marker, so Snakemake code-change detection cannot remove or rebuild
+the shared classifier after it has been completed.
+
 ## DADA2 controls
 
 The tutorial exposes separate DADA2 settings for the paired 16S path and the

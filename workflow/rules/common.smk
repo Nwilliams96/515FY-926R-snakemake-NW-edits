@@ -234,6 +234,25 @@ PR2_CLASSIFIER = os.path.join(
     + config["revPrimer"]
     + "_dereplicated_final_classifier_qiime2-2026.7.qza",
 )
+PR2_READY_MARKER = os.path.join(
+    ".snakemake",
+    "database-ready",
+    "pr2-5.1.1-"
+    + config["fwdPrimer"]
+    + "-"
+    + config["revPrimer"]
+    + ".ready",
+)
+PR2_BUILD_LOCK = os.path.join(
+    DATABASE_DIR,
+    "classification",
+    "PR2",
+    ".pr2-5.1.1-"
+    + config["fwdPrimer"]
+    + "-"
+    + config["revPrimer"]
+    + ".lock",
+)
 
 required_preexisting_database_resources = []
 if USE_PREEXISTING_BBSPLIT_DATABASE:
@@ -365,7 +384,7 @@ def get_final_output():
         #sample=samples["sample"], direction=["1","2"]
     )
 
-    final_output.extend([BBSPLIT_DB_DIR, SILVA_CLASSIFIER, PR2_CLASSIFIER])
+    final_output.extend([BBSPLIT_DB_DIR, SILVA_CLASSIFIER, PR2_READY_MARKER])
 #    final_output.append("results/02-proks/manifest.tsv"),
     final_output.append("results/02-proks/16S.qza"),
     final_output.append("results/02-proks/02-quality-plots-R1-R2/"),

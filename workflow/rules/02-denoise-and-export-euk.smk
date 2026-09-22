@@ -138,6 +138,8 @@ rule export_DADA2_results_euk:
 rule classify_ASVs_euk:
     input:
         sequences="results/02-euks/08-DADA2d/representative_sequences.qza",
+        database_ready=rules.ensure_pr2_classifier.output.marker,
+    params:
         classDB=PR2_CLASSIFIER,
     output:
         directory("results/02-euks/10-classified/"),
@@ -183,9 +185,11 @@ rule make_SILVA_only_euk_barplots:
 
 rule euk_PR2_reclassify:
     input:
-        classifier=PR2_CLASSIFIER,
+        database_ready=rules.ensure_pr2_classifier.output.marker,
         euktable=rules.denoise_euk_dada2.output.euktable,
         eukseqs=rules.denoise_euk_dada2.output.eukrepseqs
+    params:
+        classifier=PR2_CLASSIFIER,
     output:
         PR2classeuk="results/02-euks/14-subsetting/reclassified-PR2/classification.qza",
         fixedtax=directory("results/02-euks/14-subsetting/reclassified-PR2/fixed/"),

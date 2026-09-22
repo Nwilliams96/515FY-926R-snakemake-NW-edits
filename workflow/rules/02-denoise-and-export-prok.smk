@@ -114,6 +114,8 @@ rule classify_unmerged_16S_with_SILVA:
 rule classify_unmerged_16S_with_PR2:
     input:
         sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        database_ready=rules.ensure_pr2_classifier.output.marker,
+    params:
         classDB=PR2_CLASSIFIER,
     output:
         classified="results/02-proks/11-unmerged-16S-rescue/PR2.classified.qza"
@@ -210,8 +212,10 @@ rule make_SILVA_only_prok_barplots:
 
 rule classify_all_16S_with_PR2:
     input:
-        PR2classifier=PR2_CLASSIFIER,
+        database_ready=rules.ensure_pr2_classifier.output.marker,
         prokseqs=rules.denoise_prok_dada2.output.prokrepseqs,
+    params:
+        PR2classifier=PR2_CLASSIFIER,
     output:
         classified="results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza",
     threads: 8

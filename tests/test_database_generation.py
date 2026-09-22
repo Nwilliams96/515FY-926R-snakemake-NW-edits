@@ -31,14 +31,20 @@ class DatabaseGenerationTests(unittest.TestCase):
         bbsplit = (ROOT / "workflow/rules/prepare_bbsplit_db.smk").read_text(
             encoding="utf-8"
         )
-        self.assertNotIn("tax-classifier-construction", classification)
-        self.assertEqual(classification.count("--p-n-jobs {threads}"), 1)
-        self.assertGreaterEqual(classification.count("threads: 8"), 1)
-        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
-        self.assertIn("extractionStats=temp(", classification)
-        self.assertIn(
-            "--o-read-extraction-stats {output.extractionStats:q}", classification
+        pr2_builder = (ROOT / "workflow/scripts/ensure_pr2_classifier.py").read_text(
+            encoding="utf-8"
         )
+        self.assertNotIn("tax-classifier-construction", classification)
+        self.assertNotIn("rule import_pr2_fasta:", classification)
+        self.assertNotIn("rule derep_seqs_taxonomy:", classification)
+        self.assertIn("rule ensure_pr2_classifier:", classification)
+        self.assertGreaterEqual(classification.count("threads: 8"), 1)
+        self.assertEqual(pr2_builder.count('"fit-classifier-naive-bayes"'), 1)
+        self.assertIn('"--o-read-extraction-stats", extraction_stats_qza', pr2_builder)
+        self.assertIn("fcntl.flock", pr2_builder)
+        self.assertIn('prefix=".pr2-build-"', pr2_builder)
+        self.assertIn("os.replace(staged_classifier, classifier)", pr2_builder)
+        self.assertIn('["qiime", "tools", "validate", str(path)]', pr2_builder)
         self.assertIn("rule download_SILVA_144_classifier:", classification)
         self.assertIn("rule download_SILVA_144_species_reference:", classification)
         self.assertNotIn("get-silva-data", classification)
@@ -49,18 +55,20 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("444de7c0cce0b66addda7a3f8b38e012", common)
         self.assertIn("rachis-qiime2-linux-64-2026.7.yml", common)
         self.assertIn("_dereplicated_final_classifier_qiime2-2026.7.qza", common)
-        self.assertIn("output:\n        PR2_CLASSIFIER", classification)
+        self.assertIn("marker=PR2_READY_MARKER", classification)
         self.assertIn("threads: 8", bbsplit)
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
-        self.assertIn("rule download_pr2:", downloads)
-        self.assertIn('checksum_algorithm="sha256"', downloads)
+        self.assertNotIn("rule download_pr2:", downloads)
         self.assertIn(
-            'checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
-            downloads,
+            'source_checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
+            classification,
         )
-        self.assertIn('script:\n        "../scripts/download_verified_reference.py"', downloads)
+        self.assertIn(
+            'script:\n        "../scripts/download_verified_reference.py"',
+            classification,
+        )
         self.assertIn("USE_PREEXISTING_BBSPLIT_DATABASE", common)
         self.assertIn("USE_PREEXISTING_SILVA_DATABASE", common)
         self.assertIn("USE_PREEXISTING_PR2_DATABASE", common)

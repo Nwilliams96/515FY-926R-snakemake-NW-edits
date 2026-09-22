@@ -2,7 +2,7 @@
 
 #Reclassify with PR2
 qiime feature-classifier classify-sklearn \
-  --i-classifier ${snakemake_input[classifier]} \
+  --i-classifier ${snakemake_params[classifier]} \
   --i-reads ${snakemake_input[eukseqs]} \
   --o-classification ${snakemake_output[PR2classeuk]}
 

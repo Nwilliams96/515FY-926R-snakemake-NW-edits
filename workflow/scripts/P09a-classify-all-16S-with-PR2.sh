@@ -5,7 +5,7 @@ set -euo pipefail
 # zero here so the resolver can record low-confidence plastid candidates while
 # applying the user-facing acceptance threshold itself.
 qiime feature-classifier classify-sklearn \
-  --i-classifier "${snakemake_input[PR2classifier]}" \
+  --i-classifier "${snakemake_params[PR2classifier]}" \
   --i-reads "${snakemake_input[prokseqs]}" \
   --p-confidence 0.0 \
   --p-n-jobs "${snakemake[threads]}" \
