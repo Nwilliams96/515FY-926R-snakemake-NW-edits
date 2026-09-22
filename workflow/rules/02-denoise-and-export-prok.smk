@@ -39,6 +39,9 @@ rule denoise_prok_dada2:
         max_ee_r=DADA2_PROK["max_ee_r"],
         trunc_q=DADA2_PROK["trunc_q"],
         min_overlap=DADA2_PROK["min_overlap"],
+        max_merge_mismatch=DADA2_PROK["max_merge_mismatch"],
+        trim_overhang=DADA2_PROK["trim_overhang"],
+        retain_unmerged=False,
         pooling_method=DADA2_PROK["pooling_method"],
         chimera_method=DADA2_PROK["chimera_method"],
         min_fold_parent_over_abundance=DADA2_PROK["min_fold_parent_over_abundance"],
@@ -58,6 +61,90 @@ rule denoise_prok_dada2:
         "logs/02-denoise-and-export-prok/03-DADA2/DADA2.stderrout"
     script:
         "../scripts/P03-DADA2.sh"
+
+rule denoise_prok_dada2_with_unmerged:
+    input:
+        "results/02-proks/16S.qza"
+    params:
+        truncR1=DADA2_PROK["trunc_len_f"],
+        truncR2=DADA2_PROK["trunc_len_r"],
+        max_ee_f=DADA2_PROK["max_ee_f"],
+        max_ee_r=DADA2_PROK["max_ee_r"],
+        trunc_q=DADA2_PROK["trunc_q"],
+        min_overlap=DADA2_PROK["min_overlap"],
+        max_merge_mismatch=DADA2_PROK["max_merge_mismatch"],
+        trim_overhang=DADA2_PROK["trim_overhang"],
+        retain_unmerged=True,
+        pooling_method=DADA2_PROK["pooling_method"],
+        chimera_method=DADA2_PROK["chimera_method"],
+        min_fold_parent_over_abundance=DADA2_PROK["min_fold_parent_over_abundance"],
+        n_reads_learn=DADA2_PROK["n_reads_learn"]
+    output:
+        directory("results/02-proks/03-DADA2d-with-unmerged/"),
+        prokrepseqs="results/02-proks/03-DADA2d-with-unmerged/representative_sequences.qza",
+        prokstats="results/02-proks/03-DADA2d-with-unmerged/denoising_stats.qza",
+        proktable="results/02-proks/03-DADA2d-with-unmerged/table.qza",
+        prokbasetransitions="results/02-proks/03-DADA2d-with-unmerged/base_transition_stats.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=96000,
+    log:
+        "logs/02-denoise-and-export-prok/03_DADA2_with_unmerged/DADA2.stderrout"
+    script:
+        "../scripts/P03-DADA2.sh"
+
+rule classify_unmerged_16S_with_SILVA:
+    input:
+        sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        classDB=SILVA_CLASSIFIER,
+    output:
+        classified="results/02-proks/11-unmerged-16S-rescue/SILVA.classified.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
+    log:
+        "logs/02-denoise-and-export-prok/11-unmerged-SILVA.log"
+    script:
+        "../scripts/P05-classify-eASVs.sh"
+
+rule classify_unmerged_16S_with_PR2:
+    input:
+        sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        classDB=PR2_CLASSIFIER,
+    output:
+        classified="results/02-proks/11-unmerged-16S-rescue/PR2.classified.qza"
+    conda:
+        config["qiime2version"]
+    threads: 8
+    resources:
+        mem_mb=64000,
+    log:
+        "logs/02-denoise-and-export-prok/11-unmerged-PR2.log"
+    script:
+        "../scripts/P05-classify-eASVs.sh"
+
+rule export_unmerged_16S_supplement:
+    input:
+        retained_table=rules.denoise_prok_dada2_with_unmerged.output.proktable,
+        standard_table=rules.denoise_prok_dada2.output.proktable,
+        retained_sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        silva_taxonomy=rules.classify_unmerged_16S_with_SILVA.output.classified,
+        pr2_taxonomy=rules.classify_unmerged_16S_with_PR2.output.classified,
+    output:
+        table=UNMERGED_16S_TABLE,
+        summary=UNMERGED_16S_SUMMARY,
+    params:
+        min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-unmerged-16S.log"
+    script:
+        "../scripts/export_unmerged_16S.py"
 
 rule export_DADA2_results:
     input:
@@ -121,30 +208,46 @@ rule make_SILVA_only_prok_barplots:
     script:
         "../scripts/P07-make-barplot.sh"
 
-rule splitchloroplasts:
+rule classify_all_16S_with_PR2:
+    input:
+        PR2classifier=PR2_CLASSIFIER,
+        prokseqs=rules.denoise_prok_dada2.output.prokrepseqs,
+    output:
+        classified="results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza",
+    threads: 8
+    resources:
+        mem_mb=64000,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-classify-all-16S-with-PR2.log"
+    script:
+        "../scripts/P09a-classify-all-16S-with-PR2.sh"
+
+rule resolve_PR2_plastids:
+    input:
+        silva_taxonomy=rules.classify_ASVs.output.classified,
+        pr2_taxonomy=rules.classify_all_16S_with_PR2.output.classified,
+    output:
+        taxonomy="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza",
+        audit="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
+        summary="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv",
+    params:
+        min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-resolve-PR2-plastids.log"
+    script:
+        "../scripts/resolve_pr2_plastids.py"
+
+rule split_resolved_prok_categories:
     input:
         proktable=rules.denoise_prok_dada2.output.proktable,
-        proktax=rules.classify_ASVs.output.classified,
-        prokseqs=rules.denoise_prok_dada2.output.prokrepseqs
+        resolved_taxonomy=rules.resolve_PR2_plastids.output.taxonomy,
     output:
         includechlorotable="results/02-proks/09-subsetting/split-tables/include_o__Chloroplast_filtered_table.qza",
         excludechlorotable="results/02-proks/09-subsetting/split-tables/exclude_o__Chloroplast_filtered_table.qza",
-        includechloroseqs="results/02-proks/09-subsetting/split-seqs/include_o__Chloroplast_subset_filtered_subset_filtered_seqs.qza",
-        excludechloroseqs="results/02-proks/09-subsetting/split-seqs/exclude_o__Chloroplast_subset_filtered_seqs.qza"
-    conda:
-        config["qiime2version"]
-    script:
-        "../scripts/P09a-split-chloroplast.sh"
-
-rule reclassify_chloro_split_tables:
-    input:
-        PR2classifier=PR2_CLASSIFIER,
-        proktable=rules.denoise_prok_dada2.output.proktable,
-        proktax=rules.classify_ASVs.output.classified,
-        includechloroseqs=rules.splitchloroplasts.output.includechloroseqs
-    output:
-        PR2classifiedchloroseqs="results/02-proks/09-subsetting/reclassified/include_o__Chloroplast_subset_reclassified_PR2.qza",
-        mergedclass="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza",
         onlymitotable="results/02-proks/09-subsetting/split-tables/include_f__Mitochondria_filtered_table.qza",
         onlyalgaetable="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_NOTE_includes_chloroplasts_filtered_table.qza",
         onlycyanotable="results/02-proks/09-subsetting/split-tables/include_p__Cyanobacteria_exclude_o__Chloroplast_filtered_table.qza",
@@ -153,16 +256,14 @@ rule reclassify_chloro_split_tables:
         nomitonochloronocyanotable="results/02-proks/09-subsetting/split-tables/exclude_p__Cyanobacteria_exclude_f__Mitochondria_NOTE_excludes_chloroplasts_filtered_table.qza",
         onlyarchaeatable="results/02-proks/09-subsetting/split-tables/include_d__Archaea_filtered_table.qza",
         noarchaeatable="results/02-proks/09-subsetting/split-tables/exclude_d__Archaea_filtered_table.qza" 
-    params:
-        studyName=config["studyName"]
     conda:
         config["qiime2version"]
     script:
-        "../scripts/P09b-PR2-reclassify-chloroplasts-split-categories.sh"
+        "../scripts/P09b-split-resolved-prok-categories.sh"
 
 rule export_tax_convert_biom:
     input:
-        mergedtax=rules.reclassify_chloro_split_tables.output.mergedclass,
+        mergedtax=rules.resolve_PR2_plastids.output.taxonomy,
         all16Stable="results/02-proks/03-DADA2d/table.qza",
         noarch="results/02-proks/09-subsetting/split-tables/exclude_d__Archaea_filtered_table.qza",
         nomito="results/02-proks/09-subsetting/split-tables/exclude_f__Mitochondria_filtered_table.qza",

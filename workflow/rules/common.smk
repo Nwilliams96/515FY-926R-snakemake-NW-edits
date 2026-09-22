@@ -43,6 +43,17 @@ if (
 SILVA_VERSION = "144"
 config["SILVAversion"] = SILVA_VERSION
 
+# PR2 is now used as an independent plastid screen for every 16S ASV.  A PR2
+# lineage replaces SILVA only when it contains the explicit PR2 plastid marker
+# ":plas" and its classifier confidence meets this threshold.  Keeping the
+# resolver threshold separate from QIIME's classifier threshold gives the
+# audit table enough information to record low-confidence plastid candidates.
+CHLOROPLAST_PR2_MIN_CONFIDENCE = float(
+    config.get("chloroplast_pr2_min_confidence", 0.7)
+)
+if not 0 <= CHLOROPLAST_PR2_MIN_CONFIDENCE <= 1:
+    raise WorkflowError("chloroplast_pr2_min_confidence must be between 0 and 1")
+
 # DADA2 parameters are configurable per marker-gene path. These fallbacks are
 # the values used by the workflow before the controls were exposed, so older
 # study configs remain reproducible after updating the pipeline.
@@ -57,6 +68,9 @@ DADA2_PROK_DEFAULTS = {
     "max_ee_r": 2.0,
     "trunc_q": 2,
     "min_overlap": 12,
+    "max_merge_mismatch": 0,
+    "trim_overhang": False,
+    "retain_unmerged": False,
     "pooling_method": "independent",
     "chimera_method": "consensus",
     "min_fold_parent_over_abundance": 1.0,
@@ -73,6 +87,7 @@ DADA2_EUK_DEFAULTS = {
 
 DADA2_PROK = {**DADA2_PROK_DEFAULTS, **DADA2_PROK_CONFIG}
 DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
+RUN_UNMERGED_16S_RESCUE = bool(DADA2_PROK["retain_unmerged"])
 
 # New configs store internal standards as an ordered YAML list. Continue to
 # accept the older intstd1/intstd2/intstd3 mapping so existing studies remain
@@ -270,16 +285,42 @@ RESULTS_EXPORT_INPUTS = [
     RESULTS_LONG_DATA,
     "results/04-formatted/" + config["studyName"] + ".asv_sequences.tsv",
     "results/07-report/" + config["studyName"] + ".pipeline-report.html",
+    "results/02-proks/09-subsetting/tax-merged/"
+    + config["studyName"]
+    + ".PR2-plastid-routing-audit.tsv",
+    "results/02-proks/09-subsetting/tax-merged/"
+    + config["studyName"]
+    + ".PR2-plastid-routing-summary.tsv",
 ]
 RESULTS_EXPORT_OUTPUTS = [
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".long_data.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".asv_sequences.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".pipeline-report.html",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
+    RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv",
 ]
 RESULTS_EXPORT_SUMMARIES = [
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".phylum_summary.tsv",
     RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".order_summary.tsv",
 ]
+UNMERGED_16S_TABLE = (
+    "results/02-proks/11-unmerged-16S-rescue/"
+    + config["studyName"]
+    + ".unmerged_linked_16S.tsv"
+)
+UNMERGED_16S_SUMMARY = (
+    "results/02-proks/11-unmerged-16S-rescue/"
+    + config["studyName"]
+    + ".unmerged_linked_16S_summary.tsv"
+)
+if RUN_UNMERGED_16S_RESCUE:
+    RESULTS_EXPORT_INPUTS.extend([UNMERGED_16S_TABLE, UNMERGED_16S_SUMMARY])
+    RESULTS_EXPORT_OUTPUTS.extend(
+        [
+            RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".unmerged_linked_16S.tsv",
+            RESULTS_EXPORT_DIR + "/" + config["studyName"] + ".unmerged_linked_16S_summary.tsv",
+        ]
+    )
 if USE_INTERNAL_STANDARDS:
     RESULTS_EXPORT_INPUTS.append(ISD_CORRECTED_LONG_TABLE)
     RESULTS_EXPORT_OUTPUTS.append(
@@ -329,8 +370,10 @@ def get_final_output():
     final_output.append("results/02-proks/04-DADA2d-plaintext-exports"),
     final_output.append("results/02-proks/05-classified"),
     final_output.append("results/02-proks/07-SILVA-only-barplots/"),
-    final_output.append("results/02-proks/09-subsetting/split-seqs/exclude_o__Chloroplast_subset_filtered_seqs.qza"),
-    final_output.append("results/02-proks/09-subsetting/reclassified/include_o__Chloroplast_subset_reclassified_PR2.qza"),
+    final_output.append("results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv"),
+    final_output.append("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv"),
     final_output.append("results/02-proks/10-exports/" + config["studyName"] + ".all-16S-seqs.with-tax.tsv"),
     final_output.append("results/02-proks/sample-metadata.tsv"),
@@ -356,6 +399,8 @@ def get_final_output():
     )
     if USE_INTERNAL_STANDARDS:
         final_output.append(ISD_CORRECTED_LONG_TABLE)
+    if RUN_UNMERGED_16S_RESCUE:
+        final_output.extend([UNMERGED_16S_TABLE, UNMERGED_16S_SUMMARY])
 
     final_output.extend(RESULTS_EXPORT_OUTPUTS)
     final_output.extend(RESULTS_EXPORT_SUMMARIES)

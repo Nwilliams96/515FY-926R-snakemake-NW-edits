@@ -128,9 +128,23 @@ class DatabaseGenerationTests(unittest.TestCase):
         )
 
         subset_script = (
-            ROOT / "workflow/scripts/P09b-PR2-reclassify-chloroplasts-split-categories.sh"
+            ROOT / "workflow/scripts/P09b-split-resolved-prok-categories.sh"
         ).read_text(encoding="utf-8")
         self.assertIn("p__Cyanobacteria,p__Cyanobacteriota", subset_script)
+        self.assertIn(":plas,o__Chloroplast", subset_script)
+
+        prok_rules = (
+            ROOT / "workflow/rules/02-denoise-and-export-prok.smk"
+        ).read_text(encoding="utf-8")
+        self.assertIn("rule classify_all_16S_with_PR2:", prok_rules)
+        self.assertIn("rule resolve_PR2_plastids:", prok_rules)
+        self.assertIn("rule split_resolved_prok_categories:", prok_rules)
+        self.assertIn("all_16S_ASVs_PR2.classified.qza", prok_rules)
+        self.assertIn("resolved_taxonomy=rules.resolve_PR2_plastids.output.taxonomy", prok_rules)
+        self.assertNotIn("rule splitchloroplasts:", prok_rules)
+
+        self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
+        self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
 
     def test_new_amplicon_concentration_name_and_isd_ids_reach_outputs(self):
         common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
