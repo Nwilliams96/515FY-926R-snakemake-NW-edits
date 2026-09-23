@@ -151,6 +151,41 @@ excluded from ordinary abundance, richness, report bar plots, and internal-
 standard correction because linked pairs are not directly interchangeable
 with merged ASVs and automatic combination could double-count features.
 
+## Forward-only 16S sensitivity test
+
+An optional target tests whether reverse-read quality or paired-read overlap
+requirements suppress 16S taxa. It starts from the existing primer-trimmed,
+BBsplit-assigned files at `results/01-split/*.prok.R1.fastq.gz`, so it does not
+repeat primer removal or the 16S/18S split. The canonical paired-end table and
+sequences are used only for comparison and are never modified.
+
+Run the test locally with:
+
+```bash
+bash run_forward_only_16S_test.sh
+```
+
+On USC CARC, submit it with:
+
+```bash
+bash run_forward_only_16S_test_USC_CARC.sh
+```
+
+The consolidated output is written to
+`<projectName>-Forward-Only-16S-Test/`. It includes the forward-only feature
+table and taxonomy, per-sample DADA2 statistics, an exact-prefix comparison
+against canonical paired ASVs, taxon presence and abundance comparisons at
+matching SILVA ranks, and reference-based insert-length estimates for ASVs not
+represented by an exact paired-ASV prefix.
+
+The length calculation uses full-length records from the release-pinned SILVA
+DADA2 species reference. It locates the configured primer sites around each
+forward-ASV reference alignment and reports whether the estimated post-primer
+insert would satisfy the canonical truncation and minimum-overlap settings.
+These values are reference-based estimates, not direct measurements. Keep the
+forward-only table separate from the canonical paired table because distinct
+full amplicons can share an identical forward sequence.
+
 ## USC CARC runner
 
 `run_snakemake_USC_CARC_only.sh` requests one eight-core, 128 GB CARC job and
