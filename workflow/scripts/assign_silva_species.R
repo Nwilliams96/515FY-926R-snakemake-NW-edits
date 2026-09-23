@@ -36,12 +36,53 @@ append_species_labels <- function(taxonomy, species_matches) {
     )
 }
 
+assign_species_in_chunks <- function(sequences, reference_path, chunk_size) {
+  chunk_size <- as.integer(chunk_size)
+  if (is.na(chunk_size) || chunk_size < 1) {
+    stop("SILVA species-assignment chunk size must be a positive integer.")
+  }
+
+  sequence_count <- length(sequences)
+  chunk_starts <- seq.int(1L, sequence_count, by = chunk_size)
+  chunk_results <- vector("list", length(chunk_starts))
+
+  for (chunk_number in seq_along(chunk_starts)) {
+    first_index <- chunk_starts[[chunk_number]]
+    last_index <- min(first_index + chunk_size - 1L, sequence_count)
+    chunk <- sequences[first_index:last_index]
+
+    message(
+      "Assigning SILVA species for ASVs ", first_index, "-", last_index,
+      " of ", sequence_count,
+      " (batch ", chunk_number, " of ", length(chunk_starts), ")."
+    )
+    assignments <- dada2::assignSpecies(
+      as.character(chunk),
+      reference_path,
+      allowMultiple = FALSE,
+      tryRC = TRUE,
+      verbose = TRUE
+    )
+    chunk_results[[chunk_number]] <- tibble(
+      ASV_hash = names(chunk),
+      Exact_Match_Genus = assignments[, "Genus"],
+      Exact_Match_Species = assignments[, "Species"]
+    )
+
+    rm(assignments, chunk)
+    invisible(gc(full = TRUE))
+  }
+
+  bind_rows(chunk_results)
+}
+
 assign_silva_species <- function(
   taxonomy_path,
   sequence_path,
   reference_path,
   output_path,
-  summary_path
+  summary_path,
+  chunk_size = 500L
 ) {
   taxonomy <- read_tsv(
     taxonomy_path,
@@ -77,17 +118,10 @@ assign_silva_species <- function(
       Exact_Match_Species = character()
     )
   } else {
-    assignments <- dada2::assignSpecies(
-      as.character(eligible_sequences),
+    species_matches <- assign_species_in_chunks(
+      eligible_sequences,
       reference_path,
-      allowMultiple = FALSE,
-      tryRC = TRUE,
-      verbose = TRUE
-    )
-    species_matches <- tibble(
-      ASV_hash = names(eligible_sequences),
-      Exact_Match_Genus = assignments[, "Genus"],
-      Exact_Match_Species = assignments[, "Species"]
+      chunk_size
     )
   }
 
@@ -122,6 +156,7 @@ if (exists("snakemake")) {
     snakemake@input[["sequences"]],
     snakemake@input[["species_reference"]],
     snakemake@output[["taxonomy"]],
-    snakemake@output[["summary"]]
+    snakemake@output[["summary"]],
+    snakemake@params[["chunk_size"]]
   )
 }

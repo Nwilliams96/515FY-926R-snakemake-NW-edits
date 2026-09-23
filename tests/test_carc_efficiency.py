@@ -57,6 +57,18 @@ class CarcEfficiencyTests(unittest.TestCase):
             script = (ROOT / relative_path).read_text(encoding="utf-8")
             self.assertIn("--p-n-jobs ${snakemake[threads]}", script)
 
+    def test_large_pr2_classifications_limit_worker_memory(self):
+        rules = (ROOT / "workflow/rules/02-denoise-and-export-prok.smk").read_text(
+            encoding="utf-8"
+        )
+        for rule_name in (
+            "classify_unmerged_16S_with_PR2",
+            "classify_all_16S_with_PR2",
+        ):
+            rule_block = rules.split(f"rule {rule_name}:", 1)[1].split("\nrule ", 1)[0]
+            self.assertIn("threads: 2", rule_block)
+            self.assertIn("mem_mb=110000", rule_block)
+
 
 if __name__ == "__main__":
     unittest.main()

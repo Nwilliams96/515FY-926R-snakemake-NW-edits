@@ -121,9 +121,11 @@ rule classify_unmerged_16S_with_PR2:
         classified="results/02-proks/11-unmerged-16S-rescue/PR2.classified.qza"
     conda:
         config["qiime2version"]
-    threads: 8
+    # Each sklearn worker loads its own classifier state. Two workers keep the
+    # large unmerged-ASV classification below the CARC job memory limit.
+    threads: 2
     resources:
-        mem_mb=64000,
+        mem_mb=110000,
     log:
         "logs/02-denoise-and-export-prok/11-unmerged-PR2.log"
     script:
@@ -218,9 +220,11 @@ rule classify_all_16S_with_PR2:
         PR2classifier=PR2_CLASSIFIER,
     output:
         classified="results/02-proks/09-subsetting/reclassified/all_16S_ASVs_PR2.classified.qza",
-    threads: 8
+    # Limit classifier copies in memory; this rule can be large even when the
+    # standard SILVA classification completed comfortably with more workers.
+    threads: 2
     resources:
-        mem_mb=64000,
+        mem_mb=110000,
     conda:
         config["qiime2version"]
     log:
@@ -305,12 +309,16 @@ rule assign_SILVA_144_species:
     output:
         taxonomy="results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv",
         summary="results/02-proks/10-exports/" + config["studyName"] + ".SILVA-144.species-assignment-summary.tsv",
+    params:
+        chunk_size=500,
     conda:
         config["qiime2version"]
     threads: 1
     resources:
-        mem_mb=12000,
-        runtime=60,
+        # Reserve the node for this step. assignSpecies is also batched below,
+        # so its actual peak memory no longer grows with the full ASV count.
+        mem_mb=110000,
+        runtime=360,
     log:
         "logs/02-denoise-and-export-prok/10-assign-SILVA-species.log"
     script:

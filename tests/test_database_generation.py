@@ -81,6 +81,16 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("allowMultiple = FALSE", species_script)
         self.assertIn("tryRC = TRUE", species_script)
         self.assertIn("Genus_Agrees", species_script)
+        self.assertIn("assign_species_in_chunks", species_script)
+        self.assertIn("gc(full = TRUE)", species_script)
+        species_rule = (
+            ROOT / "workflow/rules/02-denoise-and-export-prok.smk"
+        ).read_text(encoding="utf-8")
+        species_rule = species_rule.split("rule assign_SILVA_144_species:", 1)[1].split(
+            "\nrule ", 1
+        )[0]
+        self.assertIn("chunk_size=500", species_rule)
+        self.assertIn("mem_mb=110000", species_rule)
         qiime_env = (
             ROOT / "workflow/envs/rachis-qiime2-linux-64-2026.7.yml"
         ).read_text(encoding="utf-8")
