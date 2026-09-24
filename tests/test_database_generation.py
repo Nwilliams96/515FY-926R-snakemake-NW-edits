@@ -82,6 +82,8 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("tryRC = TRUE", species_script)
         self.assertIn("Genus_Agrees", species_script)
         self.assertIn("assign_species_in_chunks", species_script)
+        self.assertIn("stage_reference_locally", species_script)
+        self.assertIn("Using node-local SILVA species reference", species_script)
         self.assertIn("gc(full = TRUE)", species_script)
         species_rule = (
             ROOT / "workflow/rules/02-denoise-and-export-prok.smk"
@@ -132,6 +134,14 @@ class DatabaseGenerationTests(unittest.TestCase):
                 source.as_uri(), sha_destination, sha_checksum, "sha256"
             )
             self.assertEqual(sha_destination.read_bytes(), source.read_bytes())
+
+    def test_shared_reference_download_uses_lock_and_unique_staging(self):
+        source = DOWNLOAD_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("fcntl.flock", source)
+        self.assertIn("destination_lock(destination)", source)
+        self.assertIn("tempfile.NamedTemporaryFile", source)
+        self.assertIn("os.replace(partial, destination)", source)
+        self.assertNotIn('destination.with_name(destination.name + ".part")', source)
 
     def test_long_data_parser_is_rank_named_and_silva_144_safe(self):
         source = (ROOT / "workflow/scripts/long-data-preparation.R").read_text(

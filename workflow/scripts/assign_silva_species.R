@@ -36,6 +36,51 @@ append_species_labels <- function(taxonomy, species_matches) {
     )
 }
 
+stage_reference_locally <- function(reference_path, attempts = 30L, delay = 2) {
+  for (attempt in seq_len(attempts)) {
+    staged_path <- tempfile(
+      pattern = "silva_v144_assignSpecies_",
+      tmpdir = tempdir(),
+      fileext = ".fa.gz"
+    )
+    source_size <- if (file.exists(reference_path)) {
+      file.info(reference_path)$size
+    } else {
+      NA_real_
+    }
+    copied <- !is.na(source_size) && isTRUE(suppressWarnings(
+      file.copy(reference_path, staged_path, overwrite = TRUE)
+    ))
+    staged_size <- if (file.exists(staged_path)) {
+      file.info(staged_path)$size
+    } else {
+      NA_real_
+    }
+
+    if (copied && staged_size > 0 && staged_size == source_size) {
+      message(
+        "Using node-local SILVA species reference: ", staged_path,
+        " (", staged_size, " bytes)."
+      )
+      return(staged_path)
+    }
+
+    unlink(staged_path)
+    if (attempt < attempts) {
+      message(
+        "Shared SILVA species reference was unavailable during staging; ",
+        "retrying (", attempt, " of ", attempts, ")."
+      )
+      Sys.sleep(delay)
+    }
+  }
+
+  stop(
+    "Could not make a stable node-local copy of the SILVA species reference: ",
+    reference_path
+  )
+}
+
 assign_species_in_chunks <- function(sequences, reference_path, chunk_size) {
   chunk_size <- as.integer(chunk_size)
   if (is.na(chunk_size) || chunk_size < 1) {
@@ -118,9 +163,11 @@ assign_silva_species <- function(
       Exact_Match_Species = character()
     )
   } else {
+    local_reference_path <- stage_reference_locally(reference_path)
+    on.exit(unlink(local_reference_path), add = TRUE)
     species_matches <- assign_species_in_chunks(
       eligible_sequences,
-      reference_path,
+      local_reference_path,
       chunk_size
     )
   }
