@@ -108,6 +108,12 @@ If non-default primers are entered, the workflow uses SILVA's official
 full-length classifier instead of applying the 515Y/926R-specific model to an
 incompatible region. PR2 remains the primary eukaryotic classifier.
 
+The 18S branch classifies each ASV once with PR2. The resulting artifact is
+explicitly labelled PR2, passed through the established taxonomy-whitespace
+normalization step, and then reused for the 18S bar plot, metazoan subsets, and
+the final merged table. No separate SILVA-labelled 18S classification is
+created.
+
 Both release-pinned classifiers and the SILVA species reference live in the
 shared `database_dir`. After this upgrade, the first run downloads the SILVA
 144 classifier, downloads the approximately 141 MB species reference, and

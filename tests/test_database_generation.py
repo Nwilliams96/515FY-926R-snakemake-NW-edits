@@ -174,6 +174,23 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
         self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
 
+    def test_18s_is_classified_once_with_clearly_labelled_pr2_outputs(self):
+        rules = (ROOT / "workflow/rules/02-denoise-and-export-euk.smk").read_text(
+            encoding="utf-8"
+        )
+        classifier = (
+            ROOT / "workflow/scripts/E10-classify-18S-with-PR2.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("rule classify_18S_with_PR2:", rules)
+        self.assertNotIn("rule classify_ASVs_euk:", rules)
+        self.assertNotIn("rule euk_PR2_reclassify:", rules)
+        self.assertIn("_PR2.classified.qza", rules)
+        self.assertIn("_PR2.normalized.classified.qza", rules)
+        self.assertIn("12-PR2-barplots", rules)
+        self.assertNotIn("SILVA-only", rules)
+        self.assertEqual(classifier.count("feature-classifier classify-sklearn"), 1)
+        self.assertFalse((ROOT / "workflow/scripts/E14a-PR2-alternative-class.sh").exists())
+
     def test_new_amplicon_concentration_name_and_isd_ids_reach_outputs(self):
         common = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
         merge_rule = (ROOT / "workflow/rules/03-merge-16S-18S.smk").read_text(

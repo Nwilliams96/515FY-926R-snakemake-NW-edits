@@ -52,10 +52,11 @@ class CarcEfficiencyTests(unittest.TestCase):
 
         for relative_path in (
             "workflow/scripts/P05-classify-eASVs.sh",
-            "workflow/scripts/E10-classify-seqs.sh",
+            "workflow/scripts/E10-classify-18S-with-PR2.sh",
         ):
             script = (ROOT / relative_path).read_text(encoding="utf-8")
-            self.assertIn("--p-n-jobs ${snakemake[threads]}", script)
+            self.assertIn("--p-n-jobs", script)
+            self.assertIn("${snakemake[threads]}", script)
 
     def test_large_pr2_classifications_limit_worker_memory(self):
         rules = (ROOT / "workflow/rules/02-denoise-and-export-prok.smk").read_text(

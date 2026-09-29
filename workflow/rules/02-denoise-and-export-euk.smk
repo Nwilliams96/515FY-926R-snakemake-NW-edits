@@ -135,24 +135,27 @@ rule export_DADA2_results_euk:
     script:
         "../scripts/E09-export-DADA2-results.sh"
 
-rule classify_ASVs_euk:
+rule classify_18S_with_PR2:
     input:
         sequences="results/02-euks/08-DADA2d/representative_sequences.qza",
         database_ready=rules.ensure_pr2_classifier.output.marker,
     params:
         classDB=PR2_CLASSIFIER,
     output:
-        directory("results/02-euks/10-classified/"),
-        classified="results/02-euks/10-classified/" + config["studyName"] + "_SILVA.classified.qza"
+        classified="results/02-euks/10-classified/" + config["studyName"] + "_PR2.classified.qza",
+        exported_taxonomy=temp(directory("results/02-euks/10-classified/PR2-normalization/exported-taxonomy/")),
+        taxonomy_metadata=temp("results/02-euks/10-classified/PR2-normalization/taxonomy-as-metadata.qzv"),
+        exported_metadata=temp(directory("results/02-euks/10-classified/PR2-normalization/exported-metadata/")),
+        normalized="results/02-euks/10-classified/" + config["studyName"] + "_PR2.normalized.classified.qza",
     conda:
         config["qiime2version"]
-    threads: 8
+    threads: 2
     resources:
-        mem_mb=64000,
+        mem_mb=110000,
     log:
-        "logs/02-denoise-and-export-euk/10-classify-ASVs.log"
+        "logs/02-denoise-and-export-euk/10-classify-18S-with-PR2.log"
     script:
-        "../scripts/E10-classify-seqs.sh"
+        "../scripts/E10-classify-18S-with-PR2.sh"
 
 rule create_sample_metadata_file_euk:
     input:
@@ -169,47 +172,26 @@ rule create_sample_metadata_file_euk:
     script:
         "../scripts/E11-make-sample-metadata-file.py"
 
-rule make_SILVA_only_euk_barplots:
+rule make_PR2_euk_barplots:
     input:
         euktable="results/02-euks/08-DADA2d/table.qza",
-        euktax=rules.classify_ASVs_euk.output.classified,
+        euktax=rules.classify_18S_with_PR2.output.normalized,
         eukmetadata="results/02-euks/sample-metadata.tsv"
     params:
         studyName=config["studyName"]
     output:
-        directory("results/02-euks/12-SILVA-only-barplots/")
+        directory("results/02-euks/12-PR2-barplots/")
     conda:
         config["qiime2version"]
     script:
         "../scripts/E12-make-barplot.sh"
 
-rule euk_PR2_reclassify:
-    input:
-        database_ready=rules.ensure_pr2_classifier.output.marker,
-        euktable=rules.denoise_euk_dada2.output.euktable,
-        eukseqs=rules.denoise_euk_dada2.output.eukrepseqs
-    params:
-        classifier=PR2_CLASSIFIER,
-    output:
-        PR2classeuk="results/02-euks/14-subsetting/reclassified-PR2/classification.qza",
-        fixedtax=directory("results/02-euks/14-subsetting/reclassified-PR2/fixed/"),
-        taxasmetadata="results/02-euks/14-subsetting/reclassified-PR2/fixed/taxonomy-as-metadata.qzv",
-        taxasmetadatafolder=directory("results/02-euks/14-subsetting/reclassified-PR2/fixed/taxonomy-as-metadata/"),
-        taxwithoutspaces="results/02-euks/14-subsetting/reclassified-PR2/fixed/taxonomy-without-spaces.qza"
-    conda:
-        config["qiime2version"]
-    script:
-        "../scripts/E14a-PR2-alternative-class.sh"
-
 rule export_tax_convert_biom_euk:
     input:
-        SILVAclassified=rules.classify_ASVs_euk.output.classified,
-        PR2classified=rules.euk_PR2_reclassify.output.taxwithoutspaces,
+        PR2classified=rules.classify_18S_with_PR2.output.normalized,
         all18Stable=rules.denoise_euk_dada2.output.euktable
     output:
-        SILVAtaxdir=temp(directory("results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-SILVA/")),
         PR2taxdir=temp(directory("results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-PR2/")),
-        SILVAtaxfile="results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-SILVA.tsv",
         PR2taxfile="results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-PR2.tsv",
         all18Stablebiom=temp("results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.biom")
     conda:
@@ -219,11 +201,9 @@ rule export_tax_convert_biom_euk:
 
 rule add_tax_to_biom_euk:
     input:
-        SILVAtaxfile="results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-SILVA.tsv",
         PR2taxfile="results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-PR2.tsv",
         all18Stablebiom="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.biom"
     output:
-        all18StablebiomSILVAtax=temp("results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-SILVA-tax.biom"),
         all18StablebiomPR2tax=temp("results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-PR2-tax.biom")
     conda:
         config["qiime2version"]
@@ -232,10 +212,8 @@ rule add_tax_to_biom_euk:
 
 rule export_biom_tsv_euk:
     input:
-        all18StablebiomSILVAtax="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-SILVA-tax.biom",
         all18StablebiomPR2tax="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-PR2-tax.biom"
     output:
-        all18StablebiomSILVAtaxtsv="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-SILVA-tax.tsv",
         all18StablebiomPR2taxtsv="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-PR2-tax.tsv"
     conda:
         config["qiime2version"]
@@ -244,12 +222,9 @@ rule export_biom_tsv_euk:
 
 rule subset_euk_taxonomy_tables:
     input:
-        all18SSILVA="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-SILVA-tax.tsv",
         all18SPR2="results/02-euks/15-exports/" + config["studyName"] + ".all-18S-seqs.with-PR2-tax.tsv"
     output:
-        excludemetazoaSILVAtablebiomtaxtsv="results/02-euks/15-exports/" + config["studyName"] + ".exclude_D_3__Metazoa_Animalia_SILVA_filtered_table.with-tax.tsv",
         excludemetazoaPR2tablebiomtaxtsv="results/02-euks/15-exports/" + config["studyName"] + ".exclude_Metazoa_PR2_filtered_table.with-tax.tsv",
-        includemetazoaSILVAtablebiomtaxtsv="results/02-euks/15-exports/" + config["studyName"] + ".include_D_3__Metazoa_Animalia_SILVA_filtered_table.with-tax.tsv",
         includemetazoaPR2tablebiomtaxtsv="results/02-euks/15-exports/" + config["studyName"] + ".include_Metazoa_PR2_filtered_table.with-tax.tsv"
     script:
         "../scripts/E15d-subset-tax-tsvs.py"
