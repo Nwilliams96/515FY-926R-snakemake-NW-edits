@@ -20,7 +20,11 @@ if USE_INTERNAL_STANDARDS:
         output:
             fastas=INTERNAL_STANDARD_FASTAS
         params:
-            standard_ids=INTERNAL_STANDARD_IDS
+            standard_ids=INTERNAL_STANDARD_IDS,
+            forward_primer=config["fwdPrimer"],
+            reverse_primer=config["revPrimer"],
+            trunc_r1=config["trunclens"]["truncR1"],
+            trunc_r2=config["trunclens"]["truncR2"]
         script:
             "../scripts/prepare_internal_standard_fastas.py"
 
@@ -40,9 +44,12 @@ if USE_INTERNAL_STANDARDS:
 
     rule identify_intsd_ASVS:
         input:
-            latestseqs="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_seqs.fasta",
+            latestseqs_16s="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_seqs.fasta",
+            latestseqs_18s="results/02-euks/09-DADA2d-plaintext-exports/" + config["studyName"] + ".18S.latest_seqs.fasta",
             database="config/intstd_fastas/{standard}.fasta.nhr"
         output:
+            matches_16s="config/intstd_fastas/{standard}.16S.asvs.outfmt6.tsv",
+            matches_18s="config/intstd_fastas/{standard}.18S.asvs.outfmt6.tsv",
             matches="config/intstd_fastas/{standard}.asvs.outfmt6.tsv",
             asvs="config/intstd_fastas/{standard}.asvs.txt"
         wildcard_constraints:
@@ -52,9 +59,12 @@ if USE_INTERNAL_STANDARDS:
         conda:
             "../envs/blast-env.yaml"
         shell:
-            "blastn -query {input.latestseqs:q} -db {params.database:q} "
-            "-outfmt 6 -perc_identity 99 -qcov_hsp_perc 100 > {output.matches:q} "
-            "&& cut -f1 {output.matches:q} > {output.asvs:q}"
+            "blastn -query {input.latestseqs_16s:q} -db {params.database:q} "
+            "-outfmt 6 -perc_identity 99 -qcov_hsp_perc 100 > {output.matches_16s:q} "
+            "&& blastn -query {input.latestseqs_18s:q} -db {params.database:q} "
+            "-outfmt 6 -perc_identity 99 -qcov_hsp_perc 100 > {output.matches_18s:q} "
+            "&& cat {output.matches_16s:q} {output.matches_18s:q} > {output.matches:q} "
+            "&& cut -f1 {output.matches:q} | sort -u > {output.asvs:q}"
 
 
     rule intstd_correct_data:

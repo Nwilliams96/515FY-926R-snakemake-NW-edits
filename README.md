@@ -50,6 +50,14 @@ Each ID requires a matching `<ID>_ng` column in `config/samples.tsv` and a
 matching row in `config/internal_stds.tsv`. Older configs that use the
 `intstd1`/`intstd2`/`intstd3` mapping remain supported.
 
+`config/internal_stds.tsv` accepts 16S or 18S whole-genome standards. Store the
+complete SSU rRNA gene reference in `full_SSU_sequence`; the legacy
+`full_16S_sequence` heading remains accepted. For 18S standards, the workflow
+automatically derives the same R1-plus-reverse-complemented-R2 sequence created
+by the configured eukaryotic trimming and concatenation steps, then searches
+both denoised 16S and 18S ASVs. `genome_len_bp` must remain the whole-genome
+length and `rRNA_copy_number` the number of matching SSU copies per genome.
+
 Internal-standard method tables use the configured IDs in their filenames. For
 example, standards named `BP` and `DR` produce `asv_table_BP_recovery_ratio.tsv`
 and `asv_table_mean_BP_and_DR_recovery_ratio.tsv`, so the correction represented
