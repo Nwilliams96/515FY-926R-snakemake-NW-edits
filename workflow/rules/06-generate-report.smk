@@ -24,6 +24,9 @@ rule generate_pipeline_report:
         cutadapt_qc=expand(
             "results/00-trimmed/{sample}.qc.txt", sample=samples["sample"]
         ),
+        quality_16s="results/02-proks/02-quality-plots-R1-R2/",
+        quality_18s_paired="results/02-euks/02-quality-plots-R1-R2/",
+        quality_18s_concatenated="results/02-euks/07-quality-plots-concat/",
         long_data=RESULTS_LONG_DATA,
         internal_standard_figures=INTERNAL_STANDARD_REPORT_FIGURES,
         internal_standard_table=INTERNAL_STANDARD_REPORT_TABLE,

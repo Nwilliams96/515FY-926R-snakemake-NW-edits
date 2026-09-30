@@ -6,6 +6,7 @@ import html
 import json
 import math
 import re
+import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -621,6 +622,150 @@ def embedded_image(path):
     )
 
 
+def qiime_quality_summary(visualization, direction):
+    """Read QIIME 2 demux seven-number summaries directly from a QZV."""
+    archive = Path(visualization)
+    if archive.is_dir():
+        archive = archive / "visualization.qzv"
+    if not archive.is_file():
+        return None
+
+    suffix = f"/data/{direction}-seven-number-summaries.tsv"
+    try:
+        with zipfile.ZipFile(archive) as qzv:
+            members = [name for name in qzv.namelist() if name.endswith(suffix)]
+            if not members:
+                return None
+            text = qzv.read(members[0]).decode("utf-8-sig")
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile):
+        return None
+
+    rows = list(csv.reader(text.splitlines(), delimiter="\t"))
+    if len(rows) < 2:
+        return None
+    positions = []
+    for value in rows[0][1:]:
+        parsed = number(value)
+        positions.append(int(parsed) if parsed is not None else None)
+    summaries = {
+        row[0].strip(): [number(value) for value in row[1:]]
+        for row in rows[1:]
+        if row
+    }
+    required = ("9%", "25%", "50%", "75%", "91%")
+    if any(key not in summaries for key in required):
+        return None
+
+    points = []
+    length = min(len(positions), *(len(summaries[key]) for key in required))
+    for index in range(length):
+        values = {key: summaries[key][index] for key in required}
+        if positions[index] is None or any(value is None for value in values.values()):
+            continue
+        points.append({"position": positions[index], **values})
+    return points or None
+
+
+def svg_quality_profile(points, title):
+    if not points:
+        return '<p class="small-muted">QIIME 2 quality data were not available.</p>'
+
+    width, height = 820, 350
+    left, right, top, bottom = 58, 20, 24, 52
+    plot_w, plot_h = width - left - right, height - top - bottom
+    first_position = points[0]["position"]
+    last_position = points[-1]["position"]
+    position_span = max(1, last_position - first_position)
+    max_quality = max(45, math.ceil(max(point["91%"] for point in points) / 5) * 5)
+
+    def x_coordinate(position):
+        return left + plot_w * (position - first_position) / position_span
+
+    def y_coordinate(quality):
+        return top + plot_h * (1 - quality / max_quality)
+
+    def band_path(lower_key, upper_key):
+        upper = [
+            f"{x_coordinate(point['position']):.1f},{y_coordinate(point[upper_key]):.1f}"
+            for point in points
+        ]
+        lower = [
+            f"{x_coordinate(point['position']):.1f},{y_coordinate(point[lower_key]):.1f}"
+            for point in reversed(points)
+        ]
+        return " ".join(upper + lower)
+
+    median_path = " ".join(
+        ("M" if index == 0 else "L")
+        + f" {x_coordinate(point['position']):.1f} {y_coordinate(point['50%']):.1f}"
+        for index, point in enumerate(points)
+    )
+    pieces = [
+        f'<svg class="quality-profile" viewBox="0 0 {width} {height}" '
+        f'role="img" aria-label="{esc(title)}">'
+    ]
+    for quality in range(0, max_quality + 1, 10):
+        y = y_coordinate(quality)
+        pieces.append(
+            f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" class="grid"/>'
+            f'<text x="{left-9}" y="{y+4:.1f}" text-anchor="end" class="svg-label">{quality}</text>'
+        )
+    pieces.extend(
+        [
+            f'<polygon points="{band_path("9%", "91%")}" fill="#9ecae1" opacity=".48"/>',
+            f'<polygon points="{band_path("25%", "75%")}" fill="#4292c6" opacity=".58"/>',
+            f'<path d="{median_path}" fill="none" stroke="#084594" stroke-width="2.4"/>',
+        ]
+    )
+    tick_count = min(6, len(points))
+    tick_indices = sorted(
+        {
+            round(index * (len(points) - 1) / max(1, tick_count - 1))
+            for index in range(tick_count)
+        }
+    )
+    for index in tick_indices:
+        point = points[index]
+        x = x_coordinate(point["position"])
+        pieces.append(
+            f'<line x1="{x:.1f}" y1="{height-bottom}" x2="{x:.1f}" y2="{height-bottom+5}" class="axis-tick"/>'
+            f'<text x="{x:.1f}" y="{height-bottom+22}" text-anchor="middle" class="svg-label">{point["position"]}</text>'
+        )
+    pieces.extend(
+        [
+            f'<line x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}" class="axis-tick"/>',
+            f'<text x="{(left + width - right)/2:.1f}" y="{height-10}" text-anchor="middle" class="svg-label">Base position</text>',
+            f'<text transform="translate(16,{(top + height - bottom)/2:.1f}) rotate(-90)" text-anchor="middle" class="svg-label">Quality score</text>',
+            "</svg>",
+        ]
+    )
+    return "".join(pieces)
+
+
+def quality_profiles_html(paths):
+    specifications = (
+        ("quality_16s", "forward", "16S forward reads (R1)"),
+        ("quality_16s", "reverse", "16S reverse reads (R2)"),
+        ("quality_18s_paired", "forward", "18S forward reads before concatenation"),
+        ("quality_18s_paired", "reverse", "18S reverse reads before concatenation"),
+        ("quality_18s_concatenated", "forward", "Concatenated 18S reads entering DADA2"),
+    )
+    figures = []
+    for path_key, direction, title in specifications:
+        points = qiime_quality_summary(paths.get(path_key, ""), direction)
+        if not points:
+            continue
+        figures.append(
+            '<figure class="quality-card">'
+            f'<figcaption>{esc(title)}</figcaption>'
+            f'{svg_quality_profile(points, title)}'
+            '</figure>'
+        )
+    if not figures:
+        return '<p class="small-muted">QIIME 2 sequence-quality summaries were not available.</p>'
+    return '<div class="quality-grid">' + "".join(figures) + "</div>"
+
+
 def internal_method_label(column, standard_ids):
     label = re.sub(r"^Copies_", "", column)
     for index, standard_id in reversed(list(enumerate(standard_ids, 1))):
@@ -1131,6 +1276,7 @@ def render_report(config, paths, output_path):
     post_dada2_chart = svg_sample_read_counts(
         post_dada2_reads, all_chart_samples, "Non-chimeric reads per sample after DADA2"
     )
+    quality_profiles = quality_profiles_html(paths)
 
     split_total = sum(item["total"] for item in split.values())
     final16 = sum(item["final"] for item in stats16.values())
@@ -1284,6 +1430,7 @@ h2{{font-size:25px;margin:.1em 0 .35em}} h3{{margin-top:28px}} .eyebrow{{color:v
 .chart-legend{{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 10px 2px;min-width:max-content}} .legend-item{{display:inline-flex;align-items:center;gap:7px;color:#475467;font-size:12px;font-weight:650}} .legend-swatch{{display:inline-block;width:12px;height:12px;border-radius:2px;flex:none}}
 .explorer-controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:22px 0 12px}} .explorer-control label{{display:block;margin-bottom:5px;color:#344054;font-size:13px;font-weight:750}} .explorer-control select{{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:var(--ink);font:inherit}} .explorer-control select:disabled{{background:#f1f5f9;color:#94a3b8}} .small-muted{{color:var(--muted);font-size:13px}} .taxonomy-chart{{display:grid;grid-template-columns:54px minmax(0,1fr);margin:20px 0 8px;border:1px solid var(--line);border-radius:10px;background:white;overflow:hidden}} .taxonomy-y-axis{{position:relative;height:450px;border-right:1px solid var(--line);background:white;z-index:1}} .taxonomy-y-axis span{{position:absolute;right:8px;transform:translateY(-50%);color:#475467;font-size:12px}} .taxonomy-scroll{{overflow-x:auto;min-width:0;padding:20px 18px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 74px,#e4e7ec 75px)}} .taxonomy-stacked-plot{{display:flex;align-items:flex-start;gap:5px;height:410px;min-width:max-content}} .taxonomy-sample-column{{position:relative;display:flex;flex-direction:column;justify-content:flex-start;width:34px;height:400px}} .taxonomy-stacked-bar{{display:flex;flex:none;flex-direction:column-reverse;width:100%;height:300px;background:#eef2f6;border-bottom:1px solid #94a3b8}} .taxonomy-segment{{width:100%;min-height:1px}} .taxonomy-sample-label{{position:absolute;top:308px;left:16px;width:115px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transform:rotate(55deg);transform-origin:left top;color:#475467;font-size:11px}} #taxonomy-explorer-legend{{margin:8px 0 24px;min-width:0;padding-left:0}}
 .figure-scroll{{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px;background:white}} .report-figure{{display:block;max-width:none;height:auto;margin:0}} code{{white-space:normal;word-break:break-word}} .note{{background:#eff6ff;border-left:4px solid var(--blue);padding:12px 15px;border-radius:6px;color:#344054}}
+.quality-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,430px),1fr));gap:16px;margin:18px 0}} .quality-card{{margin:0;border:1px solid var(--line);border-radius:12px;background:#fbfcfe;padding:14px;overflow-x:auto}} .quality-card figcaption{{font-weight:750;margin:0 0 8px;color:#344054}} .quality-profile{{display:block;min-width:620px;background:white;border-radius:8px}}
 details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0 14px 14px}} summary{{cursor:pointer;font-weight:750;padding:14px 0}}
 @media(max-width:650px){{.taxonomy-sample-column{{width:30px}}}}
 @media print{{nav{{display:none}}body{{background:white}}section{{box-shadow:none;break-inside:avoid}}}}
@@ -1295,7 +1442,7 @@ details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
 <section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}<h3>SILVA 144 species matching</h3><p>Species labels are added only when a genus-classified SILVA 16S ASV has an unambiguous exact sequence match in SILVA 144 and the matched genus agrees with the QIIME 2 genus assignment. A blank Species value can mean that no exact match was found, the exact match was ambiguous, or the genus checks disagreed; it does not mean that the ASV has no close relatives.</p>{species_assignment_html}<h3>PR2 plastid cross-check</h3><p>Every unique 16S ASV was independently classified with PR2. PR2 replaces SILVA only when the PR2 lineage contains the explicit <code>:plas</code> marker and meets the configured confidence threshold. This can rescue chloroplast ASVs that SILVA 144 placed among bacteria while preserving SILVA for all non-plastid calls. The complete per-ASV decision table is included in Results-Export.</p>{chloroplast_resolution_html}<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
-<section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
+<section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>QIIME 2 sequence-quality profiles</h2><p>These profiles are reconstructed directly from the seven-number summaries stored in the QIIME 2 <code>demux summarize</code> visualizations. The dark line is the median quality score at each base, the darker band spans the 25th–75th percentiles, and the lighter band spans the 9th–91st percentiles. The paired 18S plots show reads before length trimming and concatenation; the final 18S plot shows the concatenated reads supplied to DADA2.</p>{quality_profiles}<h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy bar plot</h2><p>This QIIME 2-style view shows each sample as a 100% stacked bar. Choose a taxonomy level, then order the bars by SampleID, Condition, Latitude, Longitude, or Depth. When a metadata variable is selected, you can optionally display only one value. Counts use <code>{esc(abundance_column)}</code>; hover over a colored segment for its taxon, relative abundance, and count.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div><div class="explorer-control"><label for="taxonomy-plot-field">Plot samples by</label><select id="taxonomy-plot-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Filter plotted value</label><select id="taxonomy-metadata-value"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Interactive relative taxonomic abundance by sample"></div><div id="taxonomy-explorer-legend" class="chart-legend" aria-label="Taxonomy legend"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive controls require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>
 {unmerged_section}
@@ -1317,6 +1464,11 @@ def run_from_snakemake(snakemake_object):
         "chloroplast_audit": str(snakemake_object.input.chloroplast_audit),
         "chloroplast_summary": str(snakemake_object.input.chloroplast_summary),
         "cutadapt_qc": list(snakemake_object.input.cutadapt_qc),
+        "quality_16s": str(snakemake_object.input.quality_16s),
+        "quality_18s_paired": str(snakemake_object.input.quality_18s_paired),
+        "quality_18s_concatenated": str(
+            snakemake_object.input.quality_18s_concatenated
+        ),
         "long_data": str(snakemake_object.input.long_data),
         "internal_standard_figures": list(
             getattr(snakemake_object.input, "internal_standard_figures", []) or []

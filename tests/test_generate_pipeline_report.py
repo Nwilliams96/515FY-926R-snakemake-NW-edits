@@ -1,6 +1,7 @@
 import importlib.util
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -123,6 +124,33 @@ class GeneratePipelineReportTests(unittest.TestCase):
                 "S-1\tBacteria\t\tInternal-standard\t\t\tProkaryotic_16S\tno\tA-ISD\t1000\n",
                 encoding="utf-8",
             )
+            quality_summary = (
+                "\t1\t2\t3\t4\n"
+                "count\t100\t100\t100\t100\n"
+                "2%\t10\t11\t12\t13\n"
+                "9%\t20\t21\t22\t23\n"
+                "25%\t30\t31\t32\t33\n"
+                "50%\t35\t36\t37\t38\n"
+                "75%\t40\t41\t42\t43\n"
+                "91%\t42\t43\t44\t45\n"
+                "98%\t45\t45\t45\t45\n"
+            )
+            for directory, paired in (
+                (root / "quality-16s", True),
+                (root / "quality-18s-paired", True),
+                (root / "quality-18s-concat", False),
+            ):
+                directory.mkdir()
+                with zipfile.ZipFile(directory / "visualization.qzv", "w") as qzv:
+                    qzv.writestr(
+                        "fixture/data/forward-seven-number-summaries.tsv",
+                        quality_summary,
+                    )
+                    if paired:
+                        qzv.writestr(
+                            "fixture/data/reverse-seven-number-summaries.tsv",
+                            quality_summary,
+                        )
             # A tiny valid PNG is sufficient to verify base64 embedding.
             png = root / "figure.png"
             png.write_bytes(
@@ -160,6 +188,9 @@ class GeneratePipelineReportTests(unittest.TestCase):
                     "chloroplast_audit": root / "chloroplast-audit.tsv",
                     "chloroplast_summary": root / "chloroplast-summary.tsv",
                     "cutadapt_qc": [root / "S_1.qc.txt"],
+                    "quality_16s": root / "quality-16s",
+                    "quality_18s_paired": root / "quality-18s-paired",
+                    "quality_18s_concatenated": root / "quality-18s-concat",
                     "long_data": root / "long.tsv",
                     "internal_standard_figures": [png],
                     "internal_standard_table": [root / "corrected.tsv"],
@@ -181,6 +212,14 @@ class GeneratePipelineReportTests(unittest.TestCase):
             self.assertIn("150 (12.0%)", rendered)
             self.assertIn("100 (9.1%)", rendered)
             self.assertIn("Reads retained after DADA2", rendered)
+            self.assertIn("QIIME 2 sequence-quality profiles", rendered)
+            self.assertIn("16S forward reads (R1)", rendered)
+            self.assertIn("16S reverse reads (R2)", rendered)
+            self.assertIn("18S forward reads before concatenation", rendered)
+            self.assertIn("18S reverse reads before concatenation", rendered)
+            self.assertIn("Concatenated 18S reads entering DADA2", rendered)
+            self.assertEqual(rendered.count('class="quality-card"'), 5)
+            self.assertIn('class="quality-profile"', rendered)
             self.assertIn("S-1: 800", rendered)
             self.assertIn("Not applicable", rendered)
             self.assertIn("Pseudomonadota", rendered)
