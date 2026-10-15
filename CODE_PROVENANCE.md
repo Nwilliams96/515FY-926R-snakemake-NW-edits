@@ -2,9 +2,9 @@
 
 This document records significant AI-assisted changes to the executable 515Y–926R eASV workflow. It is intended to make scientific and engineering review easier; it is not a substitute for reviewing the code, tests, and representative outputs.
 
-Git records these commits under Nathan Williams's configured Git identity. Git authorship alone does not distinguish text written directly by Nathan from code drafted, revised, or debugged with Codex. The entries below are therefore reconstructed from the project conversation history and repository history. For a conservative audit, executable workflow changes made after the initial import ([`1644b19`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/1644b19)) are treated as AI-assisted unless specifically documented otherwise.
+Git records these commits under Nathan's configured Git identity. Git authorship alone does not distinguish text written directly by Nathan from code drafted, revised, or debugged with Codex. The entries below are therefore reconstructed from the project conversation history and repository history. For a conservative audit, executable workflow changes made after the initial import ([`1644b19`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/1644b19)) are treated as AI-assisted unless specifically documented otherwise.
 
-All linked historical commits have corresponding objects in the local Git history. The link for the new local refactor commit `1a25e17` will become available on GitHub only if this branch is later pushed; this implementation intentionally does not push it without separate authorization.
+All linked historical commits have corresponding objects in the local Git history.
 
 Review values are `Pending`, `Accepted`, `Revise`, or `Reverted`. All major entries begin as `Pending`; a named human reviewer should update the record only after examining the diff and relevant outputs.
 
@@ -179,7 +179,7 @@ Review values are `Pending`, `Accepted`, `Revise`, or `Reverted`. All major entr
 
 - **Files:** `workflow/rules/prepare_classification_dbs.smk`, `workflow/rules/02-denoise-and-export-prok.smk`, small Python transformations/publication helper, tests.
 - **Request/problem:** Consolidated Python obscured PR2 construction and QIIME/BIOM export operations from the Snakemake DAG.
-- **Nathan's rationale:** Restore the original teaching-friendly, rule-per-step overview so collaborators can understand and modify each operation.
+- **Nathan's rationale:** Restore the original, rule-per-step overview so collaborators can understand and modify each operation.
 - **Codex rationale:** Put scientific and file-conversion commands back into named rules while limiting Python to pure TSV transformations and locked atomic publication.
 - **Behavioral impact:** PR2 download through classifier training, chloroplast reconciliation, and linked-supplement exports are visible in the DAG; filenames, thresholds, and final outputs remain unchanged.
 - **Tradeoffs:** The rule file is longer, and independently launched projects may duplicate private PR2 construction work before one publishes; shared outputs remain protected.
