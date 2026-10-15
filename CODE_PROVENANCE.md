@@ -259,7 +259,7 @@ These commits did not intentionally revise executable scientific behavior:
 
 Commit `8d63a81` correctly addressed a real concurrency failure: independent Snakemake processes were modifying the same shared intermediate PR2 files. Its implementation moved the full build into `ensure_pr2_classifier.py`, where locking and private staging were straightforward but the scientific steps disappeared from the Snakemake DAG.
 
-Commit `1a25e17` restores visible rules for download, decompression, FASTA/taxonomy reformatting, imports, culling, full-reference dereplication, primer extraction, extracted-reference dereplication, classifier training, validation, and publication. Intermediate artifacts now live in each project's `.snakemake/database-build/PR2/` directory. The remaining Python publication helper performs only QIIME validation, lock acquisition, and atomic publication of a completed classifier. Thus the safety fix is retained without hiding the scientific workflow.
+Commit `1a25e17` restores visible rules for download, decompression, FASTA/taxonomy reformatting, imports, culling, full-reference dereplication, primer extraction, extracted-reference dereplication, classifier training, validation, and publication. Intermediate artifacts now live in each project's `.snakemake/database-build/PR2/` directory. The remaining Python publication helper performs only QIIME validation, lock acquisition, and atomic publication of a completed classifier.
 
 ## BBsplit teaching-run download incident — unresolved
 
@@ -275,10 +275,9 @@ Before a separate approved patch, review:
 ## Review checklist
 
 - [ ] Inspect each major linked diff and update its review fields.
-- [ ] Confirm SILVA 144, PR2 5.1.1, QIIME 2 2026.7, and the 0.7 plastid threshold are scientifically intended.
-- [ ] Review exact-species limitations and wording before publication.
+- [ ] Confirm SILVA 144, PR2 5.1.1, QIIME 2 2026.7, and the 0.7 plastid threshold.
 - [ ] Compare resolved taxonomy, routing audit/summary, and linked-supplement fixtures across the transparent refactor.
 - [ ] Dry-run both missing-PR2 and valid-pre-existing-PR2 configurations in an environment with Snakemake.
-- [ ] Run a representative CARC dataset only after explicit authorization.
+- [ ] Run a representative dataset on CARC only after explicit authorization.
 - [ ] Resolve the BBsplit incident only after the requested logs are available.
 
