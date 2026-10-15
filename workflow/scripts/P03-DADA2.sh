@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits f7aba4f and f13649a.
+# AI-assisted change — see provenance ledger linked from README.md, commits f7aba4f and f13649a.
 # Purpose: pass configured paired-end DADA2 controls and optionally retain
 # linked, nonmerging pairs in a separate supplementary analysis.
 # Human review status: pending.

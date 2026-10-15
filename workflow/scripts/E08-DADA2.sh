@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits f7aba4f and 5c6c1aa.
+# AI-assisted change — see provenance ledger linked from README.md, commits f7aba4f and 5c6c1aa.
 # Purpose: pass configured single-end 18S DADA2 controls and retain transition
 # statistics needed by QIIME 2 2026.7 and the final report.
 # Human review status: pending.

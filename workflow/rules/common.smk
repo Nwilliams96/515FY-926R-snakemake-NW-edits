@@ -6,7 +6,7 @@ import pandas as pd
 from snakemake.exceptions import WorkflowError
 from snakemake.utils import validate
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits 18ead1d and 72c8c7c.
+# AI-assisted change — see provenance ledger linked from README.md, commits 18ead1d and 72c8c7c.
 # Purpose: configure BBsplit, SILVA, and PR2 independently while preserving
 # legacy configuration behavior and keeping databases outside project clones.
 # Human review status: pending.
@@ -47,7 +47,7 @@ if (
 SILVA_VERSION = "144"
 config["SILVAversion"] = SILVA_VERSION
 
-# AI-assisted change — see CODE_PROVENANCE.md, commit 92f67ee.
+# AI-assisted change — see provenance ledger linked from README.md, commit 92f67ee.
 # Purpose: recover confident PR2 plastids before ecological category splitting.
 # Human review status: pending.
 # PR2 is now used as an independent plastid screen for every 16S ASV.  A PR2
@@ -61,7 +61,7 @@ CHLOROPLAST_PR2_MIN_CONFIDENCE = float(
 if not 0 <= CHLOROPLAST_PR2_MIN_CONFIDENCE <= 1:
     raise WorkflowError("chloroplast_pr2_min_confidence must be between 0 and 1")
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits f7aba4f and f13649a.
+# AI-assisted change — see provenance ledger linked from README.md, commits f7aba4f and f13649a.
 # Purpose: expose reproducible DADA2 controls and retain a separate linked-read
 # sensitivity output without changing the canonical merged-ASV analysis.
 # Human review status: pending.
@@ -103,7 +103,7 @@ DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
 # canonical abundance, richness, taxonomy, or internal-standard outputs.
 RUN_UNMERGED_16S_RESCUE = True
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits bdc17ea and f380a1b.
+# AI-assisted change — see provenance ledger linked from README.md, commits bdc17ea and f380a1b.
 # Purpose: support any positive number of genomic 16S or 18S standards.
 # Human review status: pending.
 # New configs store internal standards as an ordered YAML list. Continue to
@@ -311,7 +311,7 @@ if not re.fullmatch(r"[A-Za-z0-9._-]+", PROJECT_NAME):
         "projectName may contain only letters, numbers, periods, underscores, "
         "and hyphens"
     )
-# AI-assisted change — see CODE_PROVENANCE.md, commits b73f253 and 8fb177b.
+# AI-assisted change — see provenance ledger linked from README.md, commits b73f253 and 8fb177b.
 # Purpose: collect user-facing outputs in a project-named download directory.
 # Human review status: pending.
 RESULTS_EXPORT_DIR = PROJECT_NAME + "-Results-Export"

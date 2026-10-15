@@ -132,7 +132,7 @@ rule classify_unmerged_16S_with_PR2:
         "../scripts/P05-classify-eASVs.sh"
 
 
-# AI-assisted change — see CODE_PROVENANCE.md, commit f13649a.
+# AI-assisted change — see provenance ledger linked from README.md, commit f13649a.
 # Purpose: expose every QIIME export and BIOM conversion used by the optional
 # linked/unmerged 16S supplement as a separately inspectable DAG rule.
 # Human review status: pending.
@@ -347,7 +347,7 @@ rule classify_all_16S_with_PR2:
         "../scripts/P09a-classify-all-16S-with-PR2.sh"
 
 
-# AI-assisted change — see CODE_PROVENANCE.md, commit 92f67ee.
+# AI-assisted change — see provenance ledger linked from README.md, commit 92f67ee.
 # Purpose: make the SILVA-first, PR2-plastid-resolution order explicit. PR2
 # replaces SILVA only for :plas lineages with confidence >= 0.7.
 # Human review status: pending.

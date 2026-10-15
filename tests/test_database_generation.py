@@ -270,8 +270,14 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
         self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
 
-    def test_ai_annotations_resolve_to_provenance_entries(self):
-        provenance = (ROOT / "CODE_PROVENANCE.md").read_text(encoding="utf-8")
+    def test_ai_annotations_link_to_hosted_provenance_ledger(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        ledger_url = (
+            "https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/"
+            "blob/codex/code-provenance/CODE_PROVENANCE.md"
+        )
+        self.assertIn(ledger_url, readme)
+        self.assertFalse((ROOT / "CODE_PROVENANCE.md").exists())
         annotated_files = [
             ROOT / "workflow/rules/common.smk",
             ROOT / "workflow/rules/prepare_classification_dbs.smk",
@@ -296,13 +302,7 @@ class DatabaseGenerationTests(unittest.TestCase):
                     annotation_blocks.extend(lines[index : index + 4])
         hashes = set(re.findall(r"\b[0-9a-f]{7}\b", "\n".join(annotation_blocks)))
         self.assertTrue(hashes)
-        for commit_hash in hashes:
-            self.assertIn(commit_hash, provenance)
-            self.assertIn(
-                "https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/"
-                + commit_hash,
-                provenance,
-            )
+        self.assertIn("provenance ledger linked from README.md", "\n".join(annotation_blocks))
 
     def test_18s_is_classified_once_with_clearly_labelled_pr2_outputs(self):
         rules = (ROOT / "workflow/rules/02-denoise-and-export-euk.smk").read_text(

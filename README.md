@@ -107,8 +107,9 @@ concatenated 18S ASVs -> one PR2 classification -> normalized/exported taxonomy
 ```
 
 The rationale, tradeoffs, and human-review status of major assisted changes are
-recorded in [CODE_PROVENANCE.md](CODE_PROVENANCE.md). The full sequence of
-repository revisions is also available in the
+recorded in the [hosted code-provenance ledger](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/blob/codex/code-provenance/CODE_PROVENANCE.md).
+It is intentionally stored outside `main`, so ordinary pipeline clones do not
+include the review document. The full sequence of repository revisions is also available in the
 [GitHub commit history](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commits/main/).
 
 Prokaryotic ASVs are classified with the official SILVA 144 SSU Ref NR99

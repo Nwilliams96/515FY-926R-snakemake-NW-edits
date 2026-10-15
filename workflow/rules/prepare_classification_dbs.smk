@@ -1,7 +1,7 @@
 import zipfile
 
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits 86ca36d and d230025.
+# AI-assisted change — see provenance ledger linked from README.md, commits 86ca36d and d230025.
 # Purpose: use the release-pinned SILVA 144 resources and publish downloads
 # safely when independent projects share one database directory.
 # Human review status: pending.
@@ -42,7 +42,7 @@ rule download_SILVA_144_species_reference:
         "../scripts/download_verified_reference.py"
 
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits 8d63a81 and 1a25e17.
+# AI-assisted change — see provenance ledger linked from README.md, commits 8d63a81 and 1a25e17.
 # Purpose: retain the original rule-per-step PR2 construction workflow while
 # keeping all intermediate files private to this project. Only the completed,
 # validated classifier is published to the shared database directory.

@@ -1,7 +1,7 @@
 # Convert ASV sequence counts into estimated absolute copies using any positive
 # number of genomic internal standards added at DNA extraction.
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits 3d56c58, bdc17ea,
+# AI-assisted change — see provenance ledger linked from README.md, commits 3d56c58, bdc17ea,
 # da22702, and f380a1b.
 # Purpose: make genomic internal-standard correction dynamic, name outputs by
 # standard, and exclude standard ASVs from ecological result tables.
