@@ -1,5 +1,9 @@
 """Download a shared reference safely and verify its checksum."""
 
+# AI-assisted change — see CODE_PROVENANCE.md, commit d230025.
+# Purpose: serialize, verify, and atomically publish shared reference downloads.
+# Human review status: pending.
+
 import fcntl
 import hashlib
 import os

@@ -1,7 +1,6 @@
 """Conservatively replace SILVA taxonomy with confident PR2 plastid calls."""
 
-# AI-assisted change — see CODE_PROVENANCE.md, commit 92f67ee and the current
-# transparent-classification refactor.
+# AI-assisted change — see CODE_PROVENANCE.md, commits 92f67ee and 1a25e17.
 # Purpose: rescue PR2-supported plastids before downstream category splitting.
 # Human review status: pending.
 

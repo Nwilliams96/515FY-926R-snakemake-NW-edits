@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+# AI-assisted change — see CODE_PROVENANCE.md, commits f7aba4f and f13649a.
+# Purpose: pass configured paired-end DADA2 controls and optionally retain
+# linked, nonmerging pairs in a separate supplementary analysis.
+# Human review status: pending.
+
 set -euo pipefail
 
 trim_overhang_flag="--p-no-trim-overhang"

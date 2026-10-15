@@ -1,5 +1,6 @@
 import importlib.util
 import hashlib
+import re
 import tempfile
 import unittest
 from unittest import mock
@@ -229,6 +230,19 @@ class DatabaseGenerationTests(unittest.TestCase):
         ):
             self.assertIn(f"rule {rule_name}:", prok_rules)
 
+        self.assertIn(
+            "silva_taxonomy=rules.export_SILVA_taxonomy_for_plastid_resolution.output",
+            prok_rules,
+        )
+        self.assertIn(
+            "pr2_taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output",
+            prok_rules,
+        )
+        self.assertIn(
+            "rules.resolve_PR2_plastids.output.taxonomy_tsv",
+            prok_rules,
+        )
+
         resolver = (ROOT / "workflow/scripts/resolve_pr2_plastids.py").read_text(
             encoding="utf-8"
         )
@@ -255,6 +269,40 @@ class DatabaseGenerationTests(unittest.TestCase):
 
         self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
         self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
+
+    def test_ai_annotations_resolve_to_provenance_entries(self):
+        provenance = (ROOT / "CODE_PROVENANCE.md").read_text(encoding="utf-8")
+        annotated_files = [
+            ROOT / "workflow/rules/common.smk",
+            ROOT / "workflow/rules/prepare_classification_dbs.smk",
+            ROOT / "workflow/rules/02-denoise-and-export-prok.smk",
+            ROOT / "workflow/rules/05-internal-standard-correction.smk",
+            ROOT / "workflow/scripts/publish_pr2_classifier.py",
+            ROOT / "workflow/scripts/resolve_pr2_plastids.py",
+            ROOT / "workflow/scripts/export_unmerged_16S.py",
+            ROOT / "workflow/scripts/assign_silva_species.R",
+            ROOT / "workflow/scripts/correct-w-isds-snakemake-v5.R",
+            ROOT / "workflow/scripts/correct_16S_18S_ASV-snakemake-v1.R",
+            ROOT / "workflow/scripts/generate_pipeline_report.py",
+            ROOT / "workflow/scripts/P03-DADA2.sh",
+            ROOT / "workflow/scripts/E08-DADA2.sh",
+            ROOT / "run_snakemake_USC_CARC_only.sh",
+        ]
+        annotation_blocks = []
+        for path in annotated_files:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if "AI-assisted change" in line:
+                    annotation_blocks.extend(lines[index : index + 4])
+        hashes = set(re.findall(r"\b[0-9a-f]{7}\b", "\n".join(annotation_blocks)))
+        self.assertTrue(hashes)
+        for commit_hash in hashes:
+            self.assertIn(commit_hash, provenance)
+            self.assertIn(
+                "https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/"
+                + commit_hash,
+                provenance,
+            )
 
     def test_18s_is_classified_once_with_clearly_labelled_pr2_outputs(self):
         rules = (ROOT / "workflow/rules/02-denoise-and-export-euk.smk").read_text(

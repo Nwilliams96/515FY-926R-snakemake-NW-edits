@@ -1,5 +1,11 @@
 """Generate a self-contained HTML summary for a completed amplicon run."""
 
+# AI-assisted change — see CODE_PROVENANCE.md, commits 069addf, 4541685,
+# 52677ec, and 92c6c58.
+# Purpose: create a self-contained QC/taxonomy report with accessible plots,
+# explicit processing summaries, and embedded QIIME quality profiles.
+# Human review status: pending.
+
 import base64
 import csv
 import html

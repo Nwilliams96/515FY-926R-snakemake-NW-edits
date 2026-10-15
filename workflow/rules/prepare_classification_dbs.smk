@@ -42,8 +42,7 @@ rule download_SILVA_144_species_reference:
         "../scripts/download_verified_reference.py"
 
 
-# AI-assisted change — see CODE_PROVENANCE.md, commits 8d63a81 and the current
-# transparent-classification refactor.
+# AI-assisted change — see CODE_PROVENANCE.md, commits 8d63a81 and 1a25e17.
 # Purpose: retain the original rule-per-step PR2 construction workflow while
 # keeping all intermediate files private to this project. Only the completed,
 # validated classifier is published to the shared database directory.

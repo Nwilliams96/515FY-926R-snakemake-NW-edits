@@ -2,6 +2,12 @@
 #then converting to proportions and multiplying counts of 18S sequences by the bias against them and adjusting the 16S sequences to match that bias (as user specifies).
 #Written by Nathan Lloyd Robert Williams 17 March 2026 (snakemake version)
 
+# AI-assisted change — see CODE_PROVENANCE.md, commits 56f0941, 2dc44ab,
+# and 77c91b8.
+# Purpose: accept current/legacy molarity inputs and report the exact 16S/18S
+# correction factors used without changing the original normalization model.
+# Human review status: pending.
+
 #Load dependencies
 library(tidyverse)
 library(data.table)

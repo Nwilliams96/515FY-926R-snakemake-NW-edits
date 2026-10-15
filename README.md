@@ -81,6 +81,36 @@ place its complete `config/` folder in the repository before running Snakemake.
 
 ## Taxonomy databases
 
+The executable classification steps are deliberately exposed as individual
+Snakemake rules. The high-level dependency order is:
+
+```text
+PR2 5.1.1 reference
+  -> decompress -> reformat sequences/taxonomy -> QIIME imports
+  -> cull -> full-reference dereplication -> primer extraction
+  -> extracted-reference dereplication -> classifier training
+  -> validation + locked atomic publication
+
+canonical 16S ASVs
+  -> SILVA 144 classification -> SILVA taxonomy export --+
+  -> PR2 5.1.1 classification -> PR2 taxonomy export -----+
+                                                          |
+                  TSV reconciliation (:plas, confidence >= 0.7)
+                    -> resolved-taxonomy import
+                    -> chloroplast/cyanobacteria/mitochondria/archaea splits
+
+linked/unmerged 16S sensitivity run
+  -> SILVA + PR2 classification -> five QIIME exports
+  -> two explicit BIOM conversions -> supplementary TSV construction
+
+concatenated 18S ASVs -> one PR2 classification -> normalized/exported taxonomy
+```
+
+The rationale, tradeoffs, and human-review status of major assisted changes are
+recorded in [CODE_PROVENANCE.md](CODE_PROVENANCE.md). The full sequence of
+repository revisions is also available in the
+[GitHub commit history](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commits/main/).
+
 Prokaryotic ASVs are classified with the official SILVA 144 SSU Ref NR99
 uniform QIIME 2 classifier. With the pipeline's default 515Y/926R primers, the
 workflow downloads SILVA's matching V4–V5 region classifier and verifies its
@@ -135,13 +165,15 @@ primer-compatible files to exist under `database_dir`; marking it as `false`
 allows Snakemake to prepare it if missing. The older
 `use_preexisting_databases` setting remains supported as a BBsplit fallback.
 
-PR2 construction is safe across simultaneous project runs. A filesystem lock
-allows only one run to build a missing classifier, all intermediate artifacts
-are written in a private staging directory, and the completed classifier is
-published to `database_dir` with one atomic rename. Other runs wait for the
-lock and then reuse the validated classifier. Each project records only a local
-readiness marker, so Snakemake code-change detection cannot remove or rebuild
-the shared classifier after it has been completed.
+PR2 construction is safe across simultaneous project runs. Each project writes
+its intermediate artifacts under `.snakemake/database-build/PR2/`; only a
+completed classifier is considered for shared publication. A filesystem lock
+serializes validation and atomic publication to `database_dir`. A project that
+finds an existing valid classifier reuses it without rebuilding. Independently
+started first-time builds can duplicate private construction work, but they
+cannot delete or expose one another's partial intermediates. Each project
+records only a local readiness marker, so Snakemake code-change detection does
+not make the shared classifier an ordinary temporary workflow output.
 
 ## DADA2 controls
 

@@ -1,5 +1,11 @@
 #!/usr/bin/env Rscript
 
+# AI-assisted change — see CODE_PROVENANCE.md, commits c7a1009, 9e3a185,
+# and d230025.
+# Purpose: append only genus-consistent exact SILVA 144 species matches while
+# bounding memory and staging the shared reference safely for concurrent jobs.
+# Human review status: pending.
+
 suppressPackageStartupMessages({
   library(Biostrings)
   library(dada2)

@@ -1,3 +1,7 @@
+# AI-assisted change — see CODE_PROVENANCE.md, commits bdc17ea and f380a1b.
+# Purpose: build and correct against a dynamic set of genomic 16S/18S internal
+# standards while keeping the optional branch absent when standards are unused.
+# Human review status: pending.
 if USE_INTERNAL_STANDARDS:
 
     INTERNAL_STANDARD_FASTAS = expand(

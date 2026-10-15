@@ -6,8 +6,7 @@ that independent Snakemake processes cannot coordinate themselves: locking a
 shared destination and replacing it only with a fully validated artifact.
 """
 
-# AI-assisted change — see CODE_PROVENANCE.md, commit 8d63a81 and the current
-# transparent-classification refactor.
+# AI-assisted change — see CODE_PROVENANCE.md, commits 8d63a81 and 1a25e17.
 # Purpose: prevent concurrent projects from exposing a partial PR2 classifier.
 # Human review status: pending.
 
