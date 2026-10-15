@@ -2,10 +2,14 @@
 
 import csv
 import re
-import subprocess
-import tempfile
 from collections import Counter
 from pathlib import Path
+
+
+# AI-assisted change — see CODE_PROVENANCE.md, commit f13649a.
+# Purpose: construct the optional linked/unmerged 16S supplement after the
+# QIIME and BIOM exports have been made visible as individual Snakemake rules.
+# Human review status: pending.
 
 
 AUDIT_COLUMNS = [
@@ -207,58 +211,22 @@ def write_outputs(table_path, summary_path, rows, summary, samples):
             writer.writerows(content)
 
 
-def run(command, log_handle):
-    subprocess.run(
-        [str(part) for part in command],
-        check=True,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-    )
-
-
 def run_from_snakemake(snakemake_object):
-    log_path = Path(str(snakemake_object.log[0]))
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="unmerged-16S-") as temp_dir:
-        root = Path(temp_dir)
-        retained_export = root / "retained-table"
-        standard_export = root / "standard-table"
-        sequence_export = root / "sequences"
-        silva_export = root / "silva"
-        pr2_export = root / "pr2"
-        with log_path.open("w", encoding="utf-8") as log_handle:
-            for artifact, destination in (
-                (snakemake_object.input.retained_table, retained_export),
-                (snakemake_object.input.standard_table, standard_export),
-                (snakemake_object.input.retained_sequences, sequence_export),
-                (snakemake_object.input.silva_taxonomy, silva_export),
-                (snakemake_object.input.pr2_taxonomy, pr2_export),
-            ):
-                run(["qiime", "tools", "export", "--input-path", artifact, "--output-path", destination], log_handle)
-            for export_dir in (retained_export, standard_export):
-                run(
-                    ["biom", "convert", "-i", export_dir / "feature-table.biom", "-o", export_dir / "feature-table.tsv", "--to-tsv"],
-                    log_handle,
-                )
-
-        sequence_files = list(sequence_export.glob("*.fasta"))
-        if len(sequence_files) != 1:
-            raise ValueError(f"Expected one exported linked-sequence FASTA, found {len(sequence_files)}")
-        rows, summary, samples = build_supplement(
-            read_biom_tsv(retained_export / "feature-table.tsv"),
-            read_biom_tsv(standard_export / "feature-table.tsv"),
-            read_fasta(sequence_files[0]),
-            read_taxonomy(silva_export / "taxonomy.tsv"),
-            read_taxonomy(pr2_export / "taxonomy.tsv"),
-            float(snakemake_object.params.min_confidence),
-        )
-        write_outputs(
-            snakemake_object.output.table,
-            snakemake_object.output.summary,
-            rows,
-            summary,
-            samples,
-        )
+    rows, summary, samples = build_supplement(
+        read_biom_tsv(snakemake_object.input.retained_table_tsv),
+        read_biom_tsv(snakemake_object.input.standard_table_tsv),
+        read_fasta(snakemake_object.input.sequence_fasta),
+        read_taxonomy(snakemake_object.input.silva_export),
+        read_taxonomy(snakemake_object.input.pr2_export),
+        float(snakemake_object.params.min_confidence),
+    )
+    write_outputs(
+        snakemake_object.output.table,
+        snakemake_object.output.summary,
+        rows,
+        summary,
+        samples,
+    )
 
 
 if "snakemake" in globals():

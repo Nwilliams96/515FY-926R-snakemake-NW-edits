@@ -1,9 +1,12 @@
 """Conservatively replace SILVA taxonomy with confident PR2 plastid calls."""
 
+# AI-assisted change — see CODE_PROVENANCE.md, commit 92f67ee and the current
+# transparent-classification refactor.
+# Purpose: rescue PR2-supported plastids before downstream category splitting.
+# Human review status: pending.
+
 import csv
 import re
-import subprocess
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -166,75 +169,23 @@ def write_tsv(path, rows, columns):
         writer.writerows(rows)
 
 
-def _run(command, log_handle):
-    subprocess.run(
-        [str(part) for part in command],
-        check=True,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-    )
-
-
 def run_from_snakemake(snakemake_object):
-    log_path = Path(str(snakemake_object.log[0]))
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     min_confidence = float(snakemake_object.params.min_confidence)
+    silva_taxonomy = snakemake_object.input.silva_taxonomy
+    pr2_taxonomy = snakemake_object.input.pr2_taxonomy
 
-    with tempfile.TemporaryDirectory(prefix="resolve-pr2-plastids-") as temp_dir:
-        temp_root = Path(temp_dir)
-        silva_export = temp_root / "silva"
-        pr2_export = temp_root / "pr2"
-        final_tsv = temp_root / "resolved-taxonomy.tsv"
-
-        with log_path.open("w", encoding="utf-8") as log_handle:
-            _run(
-                [
-                    "qiime",
-                    "tools",
-                    "export",
-                    "--input-path",
-                    snakemake_object.input.silva_taxonomy,
-                    "--output-path",
-                    silva_export,
-                ],
-                log_handle,
-            )
-            _run(
-                [
-                    "qiime",
-                    "tools",
-                    "export",
-                    "--input-path",
-                    snakemake_object.input.pr2_taxonomy,
-                    "--output-path",
-                    pr2_export,
-                ],
-                log_handle,
-            )
-
-            final_rows, audit_rows, summary = resolve_taxonomies(
-                read_taxonomy(silva_export / "taxonomy.tsv"),
-                read_taxonomy(pr2_export / "taxonomy.tsv"),
-                min_confidence,
-            )
-            write_tsv(final_tsv, final_rows, ["Feature ID", "Taxon", "Confidence"])
-            write_tsv(snakemake_object.output.audit, audit_rows, AUDIT_COLUMNS)
-            write_tsv(snakemake_object.output.summary, [summary], list(summary))
-
-            _run(
-                [
-                    "qiime",
-                    "tools",
-                    "import",
-                    "--type",
-                    "FeatureData[Taxonomy]",
-                    "--input-path",
-                    final_tsv,
-                    "--output-path",
-                    snakemake_object.output.taxonomy,
-                ],
-                log_handle,
-            )
+    final_rows, audit_rows, summary = resolve_taxonomies(
+        read_taxonomy(silva_taxonomy),
+        read_taxonomy(pr2_taxonomy),
+        min_confidence,
+    )
+    write_tsv(
+        snakemake_object.output.taxonomy_tsv,
+        final_rows,
+        ["Feature ID", "Taxon", "Confidence"],
+    )
+    write_tsv(snakemake_object.output.audit, audit_rows, AUDIT_COLUMNS)
+    write_tsv(snakemake_object.output.summary, [summary], list(summary))
 
 
 if "snakemake" in globals():

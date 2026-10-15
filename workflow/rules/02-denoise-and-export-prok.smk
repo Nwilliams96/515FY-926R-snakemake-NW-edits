@@ -131,22 +131,136 @@ rule classify_unmerged_16S_with_PR2:
     script:
         "../scripts/P05-classify-eASVs.sh"
 
+
+# AI-assisted change — see CODE_PROVENANCE.md, commit f13649a.
+# Purpose: expose every QIIME export and BIOM conversion used by the optional
+# linked/unmerged 16S supplement as a separately inspectable DAG rule.
+# Human review status: pending.
+rule export_unmerged_16S_retained_table:
+    input:
+        rules.denoise_prok_dada2_with_unmerged.output.proktable
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/retained-table/feature-table.biom")
+    params:
+        export_dir=".snakemake/classification-exports/unmerged-16S/retained-table"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-retained-table.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule export_unmerged_16S_standard_table:
+    input:
+        rules.denoise_prok_dada2.output.proktable
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/standard-table/feature-table.biom")
+    params:
+        export_dir=".snakemake/classification-exports/unmerged-16S/standard-table"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-standard-table.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule export_unmerged_16S_sequences:
+    input:
+        rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/sequences/dna-sequences.fasta")
+    params:
+        export_dir=".snakemake/classification-exports/unmerged-16S/sequences"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-sequences.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule export_unmerged_16S_SILVA_taxonomy:
+    input:
+        rules.classify_unmerged_16S_with_SILVA.output.classified
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/SILVA/taxonomy.tsv")
+    params:
+        export_dir=".snakemake/classification-exports/unmerged-16S/SILVA"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-SILVA-taxonomy.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule export_unmerged_16S_PR2_taxonomy:
+    input:
+        rules.classify_unmerged_16S_with_PR2.output.classified
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/PR2/taxonomy.tsv")
+    params:
+        export_dir=".snakemake/classification-exports/unmerged-16S/PR2"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-export-PR2-taxonomy.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule convert_unmerged_16S_retained_biom:
+    input:
+        biom=rules.export_unmerged_16S_retained_table.output
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/retained-table.tsv")
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-convert-retained-biom.log"
+    shell:
+        "biom convert -i {input.biom:q} -o {output:q} --to-tsv "
+        "> {log:q} 2>&1"
+
+
+rule convert_unmerged_16S_standard_biom:
+    input:
+        biom=rules.export_unmerged_16S_standard_table.output
+    output:
+        temp(".snakemake/classification-exports/unmerged-16S/standard-table.tsv")
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/11-convert-standard-biom.log"
+    shell:
+        "biom convert -i {input.biom:q} -o {output:q} --to-tsv "
+        "> {log:q} 2>&1"
+
+
 rule export_unmerged_16S_supplement:
     input:
-        retained_table=rules.denoise_prok_dada2_with_unmerged.output.proktable,
-        standard_table=rules.denoise_prok_dada2.output.proktable,
-        retained_sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
-        silva_taxonomy=rules.classify_unmerged_16S_with_SILVA.output.classified,
-        pr2_taxonomy=rules.classify_unmerged_16S_with_PR2.output.classified,
+        retained_table_tsv=rules.convert_unmerged_16S_retained_biom.output,
+        standard_table_tsv=rules.convert_unmerged_16S_standard_biom.output,
+        sequence_fasta=rules.export_unmerged_16S_sequences.output,
+        silva_export=rules.export_unmerged_16S_SILVA_taxonomy.output,
+        pr2_export=rules.export_unmerged_16S_PR2_taxonomy.output,
     output:
         table=UNMERGED_16S_TABLE,
         summary=UNMERGED_16S_SUMMARY,
     params:
         min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
-    conda:
-        config["qiime2version"]
-    log:
-        "logs/02-denoise-and-export-prok/11-export-unmerged-16S.log"
     script:
         "../scripts/export_unmerged_16S.py"
 
@@ -232,27 +346,78 @@ rule classify_all_16S_with_PR2:
     script:
         "../scripts/P09a-classify-all-16S-with-PR2.sh"
 
+
+# AI-assisted change — see CODE_PROVENANCE.md, commit 92f67ee.
+# Purpose: make the SILVA-first, PR2-plastid-resolution order explicit. PR2
+# replaces SILVA only for :plas lineages with confidence >= 0.7.
+# Human review status: pending.
+rule export_SILVA_taxonomy_for_plastid_resolution:
+    input:
+        rules.classify_ASVs.output.classified
+    output:
+        temp(".snakemake/classification-exports/canonical-16S/SILVA/taxonomy.tsv")
+    params:
+        export_dir=".snakemake/classification-exports/canonical-16S/SILVA"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-export-SILVA-taxonomy.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
+rule export_PR2_taxonomy_for_plastid_resolution:
+    input:
+        rules.classify_all_16S_with_PR2.output.classified
+    output:
+        temp(".snakemake/classification-exports/canonical-16S/PR2/taxonomy.tsv")
+    params:
+        export_dir=".snakemake/classification-exports/canonical-16S/PR2"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-prok/09-export-PR2-taxonomy.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+
 rule resolve_PR2_plastids:
     input:
-        silva_taxonomy=rules.classify_ASVs.output.classified,
-        pr2_taxonomy=rules.classify_all_16S_with_PR2.output.classified,
+        silva_taxonomy=rules.export_SILVA_taxonomy_for_plastid_resolution.output,
+        pr2_taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output,
     output:
-        taxonomy="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza",
+        taxonomy_tsv=temp("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-resolved-taxonomy.tsv"),
         audit="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
         summary="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-summary.tsv",
     params:
         min_confidence=CHLOROPLAST_PR2_MIN_CONFIDENCE,
+    script:
+        "../scripts/resolve_pr2_plastids.py"
+
+
+rule import_resolved_PR2_plastid_taxonomy:
+    input:
+        rules.resolve_PR2_plastids.output.taxonomy_tsv
+    output:
+        taxonomy="results/02-proks/09-subsetting/tax-merged/chloroplasts-PR2-reclassified-merged-classification.qza"
     conda:
         config["qiime2version"]
     log:
-        "logs/02-denoise-and-export-prok/09-resolve-PR2-plastids.log"
-    script:
-        "../scripts/resolve_pr2_plastids.py"
+        "logs/02-denoise-and-export-prok/09-import-resolved-taxonomy.log"
+    shell:
+        "qiime tools import --type 'FeatureData[Taxonomy]' "
+        "--input-format TSVTaxonomyFormat --input-path {input:q} "
+        "--output-path {output.taxonomy:q} > {log:q} 2>&1"
+
 
 rule split_resolved_prok_categories:
     input:
         proktable=rules.denoise_prok_dada2.output.proktable,
-        resolved_taxonomy=rules.resolve_PR2_plastids.output.taxonomy,
+        resolved_taxonomy=rules.import_resolved_PR2_plastid_taxonomy.output.taxonomy,
     output:
         includechlorotable="results/02-proks/09-subsetting/split-tables/include_o__Chloroplast_filtered_table.qza",
         excludechlorotable="results/02-proks/09-subsetting/split-tables/exclude_o__Chloroplast_filtered_table.qza",
@@ -271,7 +436,7 @@ rule split_resolved_prok_categories:
 
 rule export_tax_convert_biom:
     input:
-        mergedtax=rules.resolve_PR2_plastids.output.taxonomy,
+        mergedtax=rules.import_resolved_PR2_plastid_taxonomy.output.taxonomy,
         all16Stable="results/02-proks/03-DADA2d/table.qza",
         noarch="results/02-proks/09-subsetting/split-tables/exclude_d__Archaea_filtered_table.qza",
         nomito="results/02-proks/09-subsetting/split-tables/exclude_f__Mitochondria_filtered_table.qza",

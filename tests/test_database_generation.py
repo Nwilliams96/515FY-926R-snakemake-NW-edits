@@ -2,6 +2,7 @@ import importlib.util
 import hashlib
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -18,6 +19,13 @@ DOWNLOAD_SPEC = importlib.util.spec_from_file_location(
 DOWNLOAD = importlib.util.module_from_spec(DOWNLOAD_SPEC)
 DOWNLOAD_SPEC.loader.exec_module(DOWNLOAD)
 
+PUBLISH_SCRIPT = ROOT / "workflow/scripts/publish_pr2_classifier.py"
+PUBLISH_SPEC = importlib.util.spec_from_file_location(
+    "publish_pr2_classifier", PUBLISH_SCRIPT
+)
+PUBLISH = importlib.util.module_from_spec(PUBLISH_SPEC)
+PUBLISH_SPEC.loader.exec_module(PUBLISH)
+
 
 class DatabaseGenerationTests(unittest.TestCase):
     def test_database_rules_are_self_contained_and_use_supported_parallelism(self):
@@ -31,20 +39,33 @@ class DatabaseGenerationTests(unittest.TestCase):
         bbsplit = (ROOT / "workflow/rules/prepare_bbsplit_db.smk").read_text(
             encoding="utf-8"
         )
-        pr2_builder = (ROOT / "workflow/scripts/ensure_pr2_classifier.py").read_text(
+        pr2_publisher = (ROOT / "workflow/scripts/publish_pr2_classifier.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn("tax-classifier-construction", classification)
-        self.assertNotIn("rule import_pr2_fasta:", classification)
-        self.assertNotIn("rule derep_seqs_taxonomy:", classification)
+        for rule_name in (
+            "download_pr2_reference",
+            "decompress_pr2_reference",
+            "clean_pr2_fasta_extract_headers",
+            "import_pr2_fasta",
+            "import_pr2_taxonomy",
+            "cull_pr2_seqs",
+            "derep_seqs_taxonomy",
+            "extract_primers_pr2",
+            "dereplicate_extracted_pr2_reads",
+            "train_classifier_pr2",
+            "ensure_pr2_classifier",
+        ):
+            self.assertIn(f"rule {rule_name}:", classification)
         self.assertIn("rule ensure_pr2_classifier:", classification)
         self.assertGreaterEqual(classification.count("threads: 8"), 1)
-        self.assertEqual(pr2_builder.count('"fit-classifier-naive-bayes"'), 1)
-        self.assertIn('"--o-read-extraction-stats", extraction_stats_qza', pr2_builder)
-        self.assertIn("fcntl.flock", pr2_builder)
-        self.assertIn('prefix=".pr2-build-"', pr2_builder)
-        self.assertIn("os.replace(staged_classifier, classifier)", pr2_builder)
-        self.assertIn('["qiime", "tools", "validate", str(path)]', pr2_builder)
+        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
+        self.assertIn("--o-read-extraction-stats", classification)
+        self.assertIn('".snakemake",\n    "database-build",\n    "PR2"', classification)
+        self.assertIn("fcntl.flock", pr2_publisher)
+        self.assertIn("os.replace(temporary, destination)", pr2_publisher)
+        self.assertIn('["qiime", "tools", "validate", str(path)]', pr2_publisher)
+        self.assertFalse((ROOT / "workflow/scripts/ensure_pr2_classifier.py").exists())
         self.assertIn("rule download_SILVA_144_classifier:", classification)
         self.assertIn("rule download_SILVA_144_species_reference:", classification)
         self.assertNotIn("get-silva-data", classification)
@@ -62,7 +83,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
         self.assertNotIn("rule download_pr2:", downloads)
         self.assertIn(
-            'source_checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
+            'checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
             classification,
         )
         self.assertIn(
@@ -143,6 +164,31 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("os.replace(partial, destination)", source)
         self.assertNotIn('destination.with_name(destination.name + ".part")', source)
 
+    def test_pr2_publication_is_locked_atomic_and_reusable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "private" / "classifier.qza"
+            destination = root / "shared" / "classifier.qza"
+            marker = root / "ready" / "classifier.ready"
+            lock = root / "shared" / ".build.lock"
+            log = root / "logs" / "publish.log"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"validated fixture")
+
+            def valid_if_nonempty(path, _log_handle):
+                path = Path(path)
+                return path.is_file() and path.stat().st_size > 0
+
+            with mock.patch.object(PUBLISH, "classifier_is_valid", valid_if_nonempty):
+                PUBLISH.publish_classifier(source, destination, lock, marker, log)
+                self.assertEqual(destination.read_bytes(), b"validated fixture")
+                self.assertTrue(marker.exists())
+
+                source.write_bytes(b"new staged bytes should not replace valid shared")
+                PUBLISH.publish_classifier(source, destination, lock, marker, log)
+                self.assertEqual(destination.read_bytes(), b"validated fixture")
+                self.assertFalse(list(destination.parent.glob("*.publishing.*")))
+
     def test_long_data_parser_is_rank_named_and_silva_144_safe(self):
         source = (ROOT / "workflow/scripts/long-data-preparation.R").read_text(
             encoding="utf-8"
@@ -168,8 +214,44 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("rule resolve_PR2_plastids:", prok_rules)
         self.assertIn("rule split_resolved_prok_categories:", prok_rules)
         self.assertIn("all_16S_ASVs_PR2.classified.qza", prok_rules)
-        self.assertIn("resolved_taxonomy=rules.resolve_PR2_plastids.output.taxonomy", prok_rules)
+        self.assertIn(
+            "resolved_taxonomy=rules.import_resolved_PR2_plastid_taxonomy.output.taxonomy",
+            prok_rules,
+        )
         self.assertNotIn("rule splitchloroplasts:", prok_rules)
+
+        for rule_name in (
+            "export_SILVA_taxonomy_for_plastid_resolution",
+            "export_PR2_taxonomy_for_plastid_resolution",
+            "resolve_PR2_plastids",
+            "import_resolved_PR2_plastid_taxonomy",
+            "split_resolved_prok_categories",
+        ):
+            self.assertIn(f"rule {rule_name}:", prok_rules)
+
+        resolver = (ROOT / "workflow/scripts/resolve_pr2_plastids.py").read_text(
+            encoding="utf-8"
+        )
+        supplement = (ROOT / "workflow/scripts/export_unmerged_16S.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("subprocess", resolver)
+        self.assertNotIn("qiime tools", resolver.lower())
+        self.assertNotIn("subprocess", supplement)
+        self.assertNotIn("tempfile", supplement)
+        self.assertNotIn("qiime tools", supplement.lower())
+        self.assertNotIn("biom convert", supplement.lower())
+        for rule_name in (
+            "export_unmerged_16S_retained_table",
+            "export_unmerged_16S_standard_table",
+            "export_unmerged_16S_sequences",
+            "export_unmerged_16S_SILVA_taxonomy",
+            "export_unmerged_16S_PR2_taxonomy",
+            "convert_unmerged_16S_retained_biom",
+            "convert_unmerged_16S_standard_biom",
+            "export_unmerged_16S_supplement",
+        ):
+            self.assertIn(f"rule {rule_name}:", prok_rules)
 
         self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
         self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
