@@ -254,8 +254,6 @@ These commits did not intentionally revise executable scientific behavior:
 - [`a953109`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/a953109), [`74d56f0`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/74d56f0), and [`aa76c02`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/aa76c02) updated requirements and README material.
 - [`383a8dc`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/383a8dc) linked the public tutorial.
 - [`0f11aa1`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/0f11aa1) corrected the documented CARC submission command.
-- [`2d8b7c8`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/2d8b7c8) removed the JOSS manuscript workflow from this branch.
-- Manuscript-only commits [`21d2341`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/21d2341), [`57d5ef8`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/57d5ef8), [`01ece60`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/01ece60), [`375fe2c`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/375fe2c), [`382cde2`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/382cde2), [`2c6524f`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/2c6524f), [`59a839c`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/59a839c), and [`61ac2bc`](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commit/61ac2bc) are listed for completeness but are outside executable-workflow provenance.
 
 ## Why the consolidated PR2 builder was replaced
 
