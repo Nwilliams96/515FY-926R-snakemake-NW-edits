@@ -23,14 +23,16 @@ rule download_prok_db:
         "logs/aria2_bbsplit_prok_db_download.log",
     params:
         url="https://osf.io/eahds/download",
-        extra="--file-allocation none --retry-wait 5 --console-log-level warn --log-level notice",
-    threads: 2
+        # OSF's checksum pins the original reference. This downloader writes
+        # the exact absolute path; aria2 --out incorrectly prefixed the CWD.
+        checksum="46683398d8859aeef635fff49112c4d6453d4ebd70bf8b9fee006cb5b84273b1",
+        checksum_algorithm="sha256",
     resources:
         mem_mb=1024,
         runtime=30,
     priority: 50
-    wrapper:
-        "v7.2.0/utils/aria2c"
+    script:
+        "../scripts/download_verified_reference.py"
 
 rule download_euk_db:
     input:
@@ -41,11 +43,11 @@ rule download_euk_db:
         "logs/aria2_bbsplit_euk_db_download.log",
     params:
         url="https://osf.io/eux4r/download",
-        extra="--file-allocation none --retry-wait 5 --console-log-level warn --log-level notice",
-    threads: 2
+        checksum="c4a396035271db516a0054f1d750d3081ca5a11831b44756e91590a79ed0f109",
+        checksum_algorithm="sha256",
     resources:
         mem_mb=1024,
         runtime=30,
     priority: 50
-    wrapper:
-        "v7.2.0/utils/aria2c"
+    script:
+        "../scripts/download_verified_reference.py"
