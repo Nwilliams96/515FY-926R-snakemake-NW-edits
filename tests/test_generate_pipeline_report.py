@@ -12,6 +12,86 @@ SPEC.loader.exec_module(REPORT)
 
 
 class GeneratePipelineReportTests(unittest.TestCase):
+    def test_database_sources_are_reported_as_declared_and_escaped(self):
+        rendered = REPORT.database_resources_table({
+            "database_resources": {
+                "SILVA": {
+                    "mode": "download", "version": "144",
+                    "classifier": "/refs/silva.qza", "directory": "/refs",
+                    "url": "https://example.org/silva.qza?a=1&b=<test>",
+                    "checksum": "abc123", "classifier_region": "full_length",
+                },
+                "PR2": {
+                    "mode": "train", "version": "5.1.1",
+                    "classifier": "/refs/pr2.qza", "reference_mode": "amplicon",
+                    "training_settings": {"Forward primer": "GTGYCAGCMGCCGCGGTAA",
+                                          "Dereplication": "uniq"},
+                },
+            },
+        })
+        self.assertIn("Download pre-trained database", rendered)
+        self.assertIn("Train database with RESCRIPt", rendered)
+        self.assertIn("Declared release", rendered)
+        self.assertIn("Full-length SSU reference", rendered)
+        self.assertIn("Configured primer region", rendered)
+        self.assertIn("Training — Forward primer", rendered)
+        self.assertIn("GTGYCAGCMGCCGCGGTAA", rendered)
+        self.assertIn("uniq", rendered)
+        self.assertIn("a=1&amp;b=&lt;test&gt;", rendered)
+        self.assertIn("abc123", rendered)
+        self.assertIn("does not verify the reference release", rendered)
+
+        existing = REPORT.database_resources_table({
+            "database_resources": {
+                "SILVA": {"mode": "existing", "version": "138.2", "classifier": "/old.qza"}
+            }
+        })
+        self.assertIn("Use existing databases", existing)
+        self.assertIn("138.2", existing)
+        self.assertIn("/old.qza", existing)
+        self.assertIn("As supplied by the classifier", existing)
+
+    def test_skipped_species_matching_explains_release_without_zero_cards(self):
+        rendered = REPORT.species_assignment_table([{
+            "status": "skipped",
+            "reason": "Exact species matching is currently supported only for SILVA 144",
+            "silva_version": "138.2",
+        }])
+        self.assertIn("Species matching skipped", rendered)
+        self.assertIn("supported only for SILVA 144", rendered)
+        self.assertNotIn('class="cards"', rendered)
+        self.assertNotIn("species labels added", rendered)
+
+    def test_older_release_report_has_matching_release_and_skip_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = {
+                "samples": "sample\n001\n",
+                "split_summary": "sample\tprok_seqs_split\teuk_seqs_split\n001\t10\t2\n",
+                "stats16s": "sample-id\tinput\tfiltered\tdenoised\tmerged\tnon-chimeric\n001\t10\t9\t8\t7\t6\n",
+                "stats18s": "sample-id\tinput\tfiltered\tdenoised\tnon-chimeric\n001\t2\t2\t2\t2\n",
+                "long_data": "SampleID\tASV_hash\tDomain\tCorrected_Sequence_Counts\n001\tASV1\tBacteria\t6\n",
+                "species_assignment": (
+                    "status\treason\tsilva_version\n"
+                    "skipped\tExact species matching is currently supported only for SILVA 144\t138.2\n"
+                ),
+            }
+            paths = {}
+            for name, content in inputs.items():
+                paths[name] = root / f"{name}.tsv"
+                paths[name].write_text(content, encoding="utf-8")
+            output = root / "report.html"
+            REPORT.render_report(
+                {"studyName": "older-release", "SILVAversion": "138.2"},
+                paths,
+                output,
+            )
+            rendered = output.read_text(encoding="utf-8")
+            self.assertIn("SILVA 138.2 species matching", rendered)
+            self.assertIn("Species matching skipped", rendered)
+            self.assertNotIn("<h3>SILVA 144 species matching</h3>", rendered)
+            self.assertNotIn("species labels added", rendered)
+
     def test_compiles_after_snakemake_generated_preamble(self):
         source = "snakemake = None\n" + SCRIPT.read_text(encoding="utf-8")
         compile(source, str(SCRIPT), "exec")

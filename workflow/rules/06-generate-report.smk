@@ -18,7 +18,7 @@ rule generate_pipeline_report:
         stats16s="results/02-proks/04-DADA2d-plaintext-exports/" + config["studyName"] + ".16S.latest_stats.tsv",
         stats18s="results/02-euks/09-DADA2d-plaintext-exports/" + config["studyName"] + ".18S.latest_stats.tsv",
         correction_factors=rules.merge_prok_euk.output.correction_factors,
-        species_assignment=rules.assign_SILVA_144_species.output.summary,
+        species_assignment=rules.assign_SILVA_species.output.summary,
         chloroplast_audit=rules.resolve_PR2_plastids.output.audit,
         chloroplast_summary=rules.resolve_PR2_plastids.output.summary,
         cutadapt_qc=expand(

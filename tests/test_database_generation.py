@@ -3,6 +3,7 @@ import hashlib
 import re
 import tempfile
 import unittest
+import zipfile
 from unittest import mock
 from pathlib import Path
 
@@ -29,6 +30,19 @@ PUBLISH_SPEC.loader.exec_module(PUBLISH)
 
 
 class DatabaseGenerationTests(unittest.TestCase):
+    @staticmethod
+    def write_classifier(path, semantic_type="TaxonomicClassifier"):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("fixture/metadata.yaml", "type: " + semantic_type + "\n")
+            archive.writestr("fixture/data/classifier.pkl", b"test classifier")
+            archive.writestr(
+                "fixture/provenance/artifacts/ancestor/metadata.yaml",
+                "type: FeatureData[Sequence]\n",
+            )
+        return path
+
     def test_database_rules_are_self_contained_and_use_supported_parallelism(self):
         classification = (ROOT / "workflow/rules/prepare_classification_dbs.smk").read_text(
             encoding="utf-8"
@@ -46,10 +60,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertNotIn("tax-classifier-construction", classification)
         for rule_name in (
             "download_pr2_reference",
-            "decompress_pr2_reference",
-            "clean_pr2_fasta_extract_headers",
-            "import_pr2_fasta",
-            "import_pr2_taxonomy",
+            "normalize_pr2_reference_taxonomy",
             "cull_pr2_seqs",
             "derep_seqs_taxonomy",
             "extract_primers_pr2",
@@ -58,39 +69,45 @@ class DatabaseGenerationTests(unittest.TestCase):
             "ensure_pr2_classifier",
         ):
             self.assertIn(f"rule {rule_name}:", classification)
-        self.assertIn("rule ensure_pr2_classifier:", classification)
+        for rule_name in (
+            "download_SILVA", "reverse_transcribe", "qc_seqs_cull",
+            "qc_seqs_filter", "qc_seqs_dereplicate", "extract_primers",
+            "dereplicated_sliced_data", "train_classifier", "ensure_silva_classifier",
+            "download_SILVA_classifier", "download_PR2_classifier",
+        ):
+            self.assertIn(f"rule {rule_name}:", classification)
+        for removed_rule in (
+            "decompress_pr2_reference", "clean_pr2_fasta_extract_headers",
+            "import_pr2_fasta", "import_pr2_taxonomy",
+        ):
+            self.assertNotIn(f"rule {removed_rule}:", classification)
         self.assertGreaterEqual(classification.count("threads: 8"), 1)
-        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 1)
+        self.assertEqual(classification.count("fit-classifier-naive-bayes"), 2)
         self.assertIn("--o-read-extraction-stats", classification)
-        self.assertIn('".snakemake",\n    "database-build",\n    "PR2"', classification)
+        self.assertIn("--p-rank-handles disable", classification)
+        self.assertIn("get-pr2-data", classification)
+        self.assertIn("get-silva-data", classification)
+        self.assertIn("--p-labels Bacteria Archaea Eukaryota --p-min-lens 1200 900 1400", classification)
         self.assertIn("fcntl.flock", pr2_publisher)
         self.assertIn("os.replace(temporary, destination)", pr2_publisher)
         self.assertIn('["qiime", "tools", "validate", str(path)]', pr2_publisher)
         self.assertFalse((ROOT / "workflow/scripts/ensure_pr2_classifier.py").exists())
-        self.assertIn("rule download_SILVA_144_classifier:", classification)
         self.assertIn("rule download_SILVA_144_species_reference:", classification)
-        self.assertNotIn("get-silva-data", classification)
-        self.assertIn('SILVA_VERSION = "144"', common)
-        self.assertIn("SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza", common)
-        self.assertIn("f7757b01eb82e0ac78bf06427e410095", common)
+        self.assertIn('config.get("SILVAversion", "144")', common)
         self.assertIn("silva_v144_assignSpecies.fa.gz", common)
         self.assertIn("444de7c0cce0b66addda7a3f8b38e012", common)
         self.assertIn("rachis-qiime2-linux-64-2026.7.yml", common)
-        self.assertIn("_dereplicated_final_classifier_qiime2-2026.7.qza", common)
         self.assertIn("marker=PR2_READY_MARKER", classification)
+        self.assertIn("marker=SILVA_READY_MARKER", classification)
         self.assertIn("threads: 8", bbsplit)
         self.assertIn("bbsplit.sh build=1 threads={threads}", bbsplit)
         self.assertIn("rule initialize_database_directories:", downloads)
         self.assertIn('DATABASE_PREFIX + "classification/SILVA"', downloads)
         self.assertNotIn("rule download_pr2:", downloads)
-        self.assertIn(
-            'checksum="0c8728abcbb2126eed2c7e587f820cbce39c138cdfdb51239bbf18621498462d"',
-            classification,
-        )
-        self.assertIn(
-            'script:\n        "../scripts/download_verified_reference.py"',
-            classification,
-        )
+        self.assertNotIn('"v7.2.0/utils/aria2c"', downloads)
+        self.assertIn("46683398d8859aeef635fff49112c4d6453d4ebd70bf8b9fee006cb5b84273b1", downloads)
+        self.assertIn("c4a396035271db516a0054f1d750d3081ca5a11831b44756e91590a79ed0f109", downloads)
+        self.assertRegex(classification, r'script:\s+"\.\./scripts/download_verified_reference\.py"')
         self.assertIn("USE_PREEXISTING_BBSPLIT_DATABASE", common)
         self.assertIn("USE_PREEXISTING_SILVA_DATABASE", common)
         self.assertIn("USE_PREEXISTING_PR2_DATABASE", common)
@@ -110,7 +127,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         species_rule = (
             ROOT / "workflow/rules/02-denoise-and-export-prok.smk"
         ).read_text(encoding="utf-8")
-        species_rule = species_rule.split("rule assign_SILVA_144_species:", 1)[1].split(
+        species_rule = species_rule.split("rule assign_SILVA_species:", 1)[1].split(
             "\nrule ", 1
         )[0]
         self.assertIn("chunk_size=500", species_rule)
@@ -165,6 +182,51 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("os.replace(partial, destination)", source)
         self.assertNotIn('destination.with_name(destination.name + ".part")', source)
 
+    def test_classifier_download_without_checksum_requires_valid_type_and_qiime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self.write_classifier(root / "source.qza")
+            destination = root / "absolute destination" / "classifier.qza"
+            log = root / "logs" / "download.log"
+            with mock.patch.object(DOWNLOAD.subprocess, "run") as validate:
+                DOWNLOAD.download_verified(
+                    source.as_uri(), destination, validate_classifier=True, log_path=log
+                )
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+            self.assertEqual(validate.call_count, 1)
+            self.assertEqual(validate.call_args.args[0][:3], ["qiime", "tools", "validate"])
+            self.assertIn("No publisher checksum supplied", log.read_text())
+            self.assertFalse(list(destination.parent.glob("*.part")))
+            with self.assertRaisesRegex(ValueError, "require a published checksum"):
+                DOWNLOAD.download_verified(source.as_uri(), root / "raw.fasta")
+
+    def test_classifier_download_rejects_nonclassifier_archive_and_preserves_old_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self.write_classifier(root / "sequences.qza", "FeatureData[Sequence]")
+            destination = root / "classifier.qza"
+            destination.write_bytes(b"prior reference")
+            with mock.patch.object(DOWNLOAD.subprocess, "run") as qiime:
+                with self.assertRaisesRegex(ValueError, "TaxonomicClassifier"):
+                    DOWNLOAD.download_verified(
+                        source.as_uri(), destination, validate_classifier=True
+                    )
+                qiime.assert_not_called()
+            self.assertEqual(destination.read_bytes(), b"prior reference")
+            self.assertFalse(list(root.glob("*.part")))
+
+    def test_valid_cached_classifier_is_revalidated_without_network_request(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            destination = self.write_classifier(Path(tmp) / "classifier.qza")
+            with mock.patch.object(DOWNLOAD.subprocess, "run") as qiime:
+                with mock.patch.object(DOWNLOAD.urllib.request, "urlopen") as network:
+                    DOWNLOAD.download_verified(
+                        "https://references.example/classifier.qza", destination,
+                        validate_classifier=True,
+                    )
+                    network.assert_not_called()
+                    qiime.assert_called_once()
+
     def test_pr2_publication_is_locked_atomic_and_reusable(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -189,6 +251,54 @@ class DatabaseGenerationTests(unittest.TestCase):
                 PUBLISH.publish_classifier(source, destination, lock, marker, log)
                 self.assertEqual(destination.read_bytes(), b"validated fixture")
                 self.assertFalse(list(destination.parent.glob("*.publishing.*")))
+
+    def test_existing_classifier_validation_never_writes_beside_the_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self.write_classifier(root / "read-only source" / "provided.qza")
+            before = source.read_bytes()
+            marker = root / "project" / "classifier.ready"
+            with mock.patch.object(PUBLISH.subprocess, "run") as qiime:
+                qiime.return_value.returncode = 0
+                PUBLISH.publish_classifier(
+                    source, source, root / "project" / "publish.lock",
+                    marker, root / "project" / "publish.log",
+                    read_only=True, label="SILVA",
+                )
+            self.assertTrue(marker.exists())
+            self.assertEqual(source.read_bytes(), before)
+            self.assertEqual(list(source.parent.iterdir()), [source])
+            self.assertIn(str(source.resolve()), marker.read_text())
+
+    def test_publication_rejects_wrong_artifact_type_before_running_qiime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self.write_classifier(root / "sequences.qza", "FeatureData[Sequence]")
+            with mock.patch.object(PUBLISH.subprocess, "run") as qiime:
+                with self.assertRaisesRegex(RuntimeError, "failed QIIME validation"):
+                    PUBLISH.publish_classifier(
+                        source, root / "classifier.qza", root / "publish.lock",
+                        root / "ready", root / "publish.log", label="SILVA",
+                    )
+                qiime.assert_not_called()
+            self.assertFalse((root / "classifier.qza").exists())
+            self.assertFalse((root / "ready").exists())
+
+    def test_expected_download_checksum_prevents_reusing_different_valid_classifier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = self.write_classifier(root / "private" / "classifier.qza")
+            destination = self.write_classifier(root / "shared" / "classifier.qza")
+            with zipfile.ZipFile(destination, "a") as archive:
+                archive.writestr("fixture/data/old.txt", "old valid classifier")
+            expected = hashlib.md5(source.read_bytes()).hexdigest()
+            with mock.patch.object(PUBLISH.subprocess, "run") as qiime:
+                qiime.return_value.returncode = 0
+                PUBLISH.publish_classifier(
+                    source, destination, root / "shared" / "publish.lock",
+                    root / "ready", root / "publish.log", expected_md5=expected,
+                )
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
 
     def test_long_data_parser_is_rank_named_and_silva_144_safe(self):
         source = (ROOT / "workflow/scripts/long-data-preparation.R").read_text(
@@ -235,7 +345,7 @@ class DatabaseGenerationTests(unittest.TestCase):
             prok_rules,
         )
         self.assertIn(
-            "pr2_taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output",
+            "pr2_taxonomy=rules.normalize_canonical_16S_PR2_rank_prefixes.output.normalized",
             prok_rules,
         )
         self.assertIn(
@@ -357,6 +467,23 @@ class DatabaseGenerationTests(unittest.TestCase):
                 taxonomy.read_text(encoding="utf-8"),
                 "feature_1\ttaxon one\nfeature_2\ttaxon two\n",
             )
+
+    def test_pr2_prefix_normalization_preserves_nine_ranks_and_plastid_markers(self):
+        # RESCRIPt 2026.7 get_pr2.py prepends these handles and joins fields
+        # with semicolons without spaces. Exercise the actual rule expression
+        # against that serialization rather than merely checking its text.
+        rules = (ROOT / "workflow/rules/prepare_classification_dbs.smk").read_text()
+        normalizer = rules.split("rule normalize_pr2_reference_taxonomy:", 1)[1].split("rule cull_pr2_seqs:", 1)[0]
+        search = re.search(r"--p-search-strings '([^']+)'", normalizer).group(1)
+        replacement = re.search(r"--p-replacement-strings '([^']+)'", normalizer).group(1)
+        fields = ["Eukaryota", "Archaeplastida", "Chlorophyta:plas", "Chlorophyta_X",
+                  "Mamiellophyceae", "Mamiellales", "Mamiellaceae", "Micromonas", "Micromonas_commoda"]
+        handles = ["d__", "sgr__", "dv__", "dvs__", "c__", "o__", "f__", "g__", "s__"]
+        serialized = ";".join(handle + name for handle, name in zip(handles, fields))
+        normalized = re.sub(search, replacement, serialized)
+        self.assertEqual(normalized.split(";"), fields)
+        self.assertEqual(normalized.count(";"), 8)
+        self.assertIn(":plas", normalized)
 
 
 if __name__ == "__main__":

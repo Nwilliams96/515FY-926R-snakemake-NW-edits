@@ -146,7 +146,9 @@ rule classify_18S_with_PR2:
         exported_taxonomy=temp(directory("results/02-euks/10-classified/PR2-normalization/exported-taxonomy/")),
         taxonomy_metadata=temp("results/02-euks/10-classified/PR2-normalization/taxonomy-as-metadata.qzv"),
         exported_metadata=temp(directory("results/02-euks/10-classified/PR2-normalization/exported-metadata/")),
-        normalized="results/02-euks/10-classified/" + config["studyName"] + "_PR2.normalized.classified.qza",
+        # E10's established whitespace workaround remains intact. This private
+        # intermediate feeds the visible rank-prefix normalization rule below.
+        normalized=temp("results/02-euks/10-classified/PR2-normalization/whitespace-normalized.qza"),
     conda:
         config["qiime2version"]
     threads: 2
@@ -156,6 +158,49 @@ rule classify_18S_with_PR2:
         "logs/02-denoise-and-export-euk/10-classify-18S-with-PR2.log"
     script:
         "../scripts/E10-classify-18S-with-PR2.sh"
+
+rule export_18S_PR2_taxonomy_for_normalization:
+    input:
+        rules.classify_18S_with_PR2.output.normalized
+    output:
+        temp(".snakemake/classification-exports/18S/PR2-raw/taxonomy.tsv")
+    params:
+        export_dir=".snakemake/classification-exports/18S/PR2-raw"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-euk/10-export-PR2-taxonomy.log"
+    shell:
+        "mkdir -p {params.export_dir:q} && "
+        "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
+        "> {log:q} 2>&1"
+
+rule normalize_18S_PR2_rank_prefixes:
+    input:
+        taxonomy=rules.export_18S_PR2_taxonomy_for_normalization.output
+    output:
+        normalized=temp(".snakemake/classification-exports/18S/PR2/taxonomy.tsv")
+    log:
+        "logs/02-denoise-and-export-euk/10-normalize-PR2-rank-prefixes.log"
+    # Preserve every exported column, including Confidence. The RESCRIPt
+    # edit-taxonomy action drops confidence because it returns a taxonomy
+    # Series; a small TSV transformation avoids that scientific side effect.
+    script:
+        "../scripts/normalize_pr2_taxonomy.py"
+
+rule import_normalized_18S_PR2_taxonomy:
+    input:
+        rules.normalize_18S_PR2_rank_prefixes.output.normalized
+    output:
+        normalized="results/02-euks/10-classified/" + config["studyName"] + "_PR2.normalized.classified.qza"
+    conda:
+        config["qiime2version"]
+    log:
+        "logs/02-denoise-and-export-euk/10-import-normalized-PR2-taxonomy.log"
+    shell:
+        "qiime tools import --type 'FeatureData[Taxonomy]' "
+        "--input-path {input:q} --output-path {output.normalized:q} "
+        "> {log:q} 2>&1"
 
 rule create_sample_metadata_file_euk:
     input:
@@ -175,7 +220,7 @@ rule create_sample_metadata_file_euk:
 rule make_PR2_euk_barplots:
     input:
         euktable="results/02-euks/08-DADA2d/table.qza",
-        euktax=rules.classify_18S_with_PR2.output.normalized,
+        euktax=rules.import_normalized_18S_PR2_taxonomy.output.normalized,
         eukmetadata="results/02-euks/sample-metadata.tsv"
     params:
         studyName=config["studyName"]
@@ -188,7 +233,7 @@ rule make_PR2_euk_barplots:
 
 rule export_tax_convert_biom_euk:
     input:
-        PR2classified=rules.classify_18S_with_PR2.output.normalized,
+        PR2classified=rules.import_normalized_18S_PR2_taxonomy.output.normalized,
         all18Stable=rules.denoise_euk_dada2.output.euktable
     output:
         PR2taxdir=temp(directory("results/02-euks/15-exports/" + config["studyName"] + ".taxonomy-PR2/")),

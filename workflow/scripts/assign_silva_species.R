@@ -8,7 +8,7 @@
 
 suppressPackageStartupMessages({
   library(Biostrings)
-  library(dada2)
+  # dada2::assignSpecies is loaded only if exact matching is actually used.
   library(dplyr)
   library(readr)
   library(stringr)
@@ -133,8 +133,30 @@ assign_silva_species <- function(
   reference_path,
   output_path,
   summary_path,
-  chunk_size = 500L
+  chunk_size = 500L,
+  enabled = TRUE,
+  silva_version = "144"
 ) {
+  # Never combine an older classifier with the release-144 exact-match file.
+  # Preserve the original exported taxonomy byte-for-byte; even the FASTA and
+  # reference need not exist on this branch. The report displays this reason
+  # rather than presenting absent calculations as zero species matches.
+  if (!isTRUE(enabled)) {
+    if (!isTRUE(file.copy(taxonomy_path, output_path, overwrite = TRUE))) {
+      stop("Could not copy the taxonomy table while skipping species matching.")
+    }
+    write_tsv(
+      tibble(
+        status = "skipped",
+        reason = "Exact species matching is currently supported only for SILVA 144",
+        silva_version = as.character(silva_version)
+      ),
+      summary_path,
+      na = ""
+    )
+    return(invisible(NULL))
+  }
+
   taxonomy <- read_tsv(
     taxonomy_path,
     show_col_types = FALSE,
@@ -191,7 +213,8 @@ assign_silva_species <- function(
       ),
       unmatched_or_ambiguous =
         eligible_SILVA_ASVs - exact_unambiguous_species_matches
-    )
+    ) %>%
+    mutate(status = "completed", silva_version = as.character(silva_version))
 
   output <- augmented %>%
     select(ASV_hash, taxonomy = Taxonomy, confidence)
@@ -204,12 +227,15 @@ assign_silva_species <- function(
 if (exists("snakemake")) {
   sink(snakemake@log[[1]], append = TRUE, split = TRUE)
   on.exit(sink(), add = TRUE)
+  species_reference <- snakemake@input[["species_reference"]]
   assign_silva_species(
     snakemake@input[["taxonomy"]],
     snakemake@input[["sequences"]],
-    snakemake@input[["species_reference"]],
+    if (length(species_reference)) species_reference[[1]] else NULL,
     snakemake@output[["taxonomy"]],
     snakemake@output[["summary"]],
-    snakemake@params[["chunk_size"]]
+    snakemake@params[["chunk_size"]],
+    enabled = snakemake@params[["enabled"]],
+    silva_version = snakemake@params[["silva_version"]]
   )
 }

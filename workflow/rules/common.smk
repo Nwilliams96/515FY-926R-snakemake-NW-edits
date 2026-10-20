@@ -44,8 +44,12 @@ if (
 ):
     config["qiime2version"] = DEFAULT_QIIME2_ENV
 
-SILVA_VERSION = "144"
+SILVA_VERSION = str(config.get("SILVAversion", "144"))
+PR2_VERSION = str(config.get("PR2version", "5.1.1"))
 config["SILVAversion"] = SILVA_VERSION
+config["PR2version"] = PR2_VERSION
+for family in ("silva", "pr2"):
+    config[family + "_reference_mode"] = config.get(family + "_reference_mode", "amplicon")
 
 # AI-assisted change — see provenance ledger linked from README.md, commit 92f67ee.
 # Purpose: recover confident PR2 plastids before ecological category splitting.
@@ -187,45 +191,55 @@ AMPLICON_CONCENTRATIONS_FILE = next(
     NEW_AMPLICON_CONCENTRATIONS_FILE,
 )
 
-DATABASE_DIR = os.path.normpath(config["database_dir"])
+# Keep shared supporting resources separate from explicit, read-only classifiers.
+DATABASE_DIR = os.path.normpath(os.path.expanduser(config["database_dir"]))
 DATABASE_PREFIX = DATABASE_DIR + os.sep
-BBSPLIT_DB_DIR = os.path.join(
-    DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db"
-)
-SILVA_144_BASE_URL = (
-    "https://www.arb-silva.de/fileadmin/silva_databases/current/"
-    "QIIME2/2026.7/SSU/"
-)
-if (
-    config["fwdPrimer"] == "GTGYCAGCMGCCGCGGTAA"
-    and config["revPrimer"] == "CCGYCAATTYMTTTRAGTTT"
-):
-    SILVA_CLASSIFIER_FILENAME = (
-        "SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza"
-    )
-    SILVA_CLASSIFIER_URL = (
-        SILVA_144_BASE_URL
-        + "V4V5-515f-926r/uniform/"
-        + SILVA_CLASSIFIER_FILENAME
-    )
-    SILVA_CLASSIFIER_MD5 = "f7757b01eb82e0ac78bf06427e410095"
-else:
-    # A region-specific classifier would be invalid for other primer pairs.
-    # Use SILVA's full-length classifier as the safe general SSU fallback.
-    SILVA_CLASSIFIER_FILENAME = (
-        "SILVA_144_SSURef_NR99_full-length_prokaryotes-"
-        "rank-propagation_uniq_genus_uniform_classifier.qza"
-    )
-    SILVA_CLASSIFIER_URL = (
-        SILVA_144_BASE_URL
-        + "full-length/uniform/"
-        + SILVA_CLASSIFIER_FILENAME
-    )
-    SILVA_CLASSIFIER_MD5 = "e16b9bc78dafa2f344563e570bbf25ba"
+BBSPLIT_DB_DIR = os.path.join(DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db")
 
-SILVA_CLASSIFIER = os.path.join(
-    DATABASE_DIR, "classification", "SILVA", SILVA_CLASSIFIER_FILENAME
+# This small module resolves configuration only. All preparation commands
+# remain visible in prepare_classification_dbs.smk.
+import hashlib
+import importlib.util
+database_spec = importlib.util.spec_from_file_location(
+    "easv_database_config", str(workflow.source_path("../scripts/database_config.py"))
 )
+database_config = importlib.util.module_from_spec(database_spec)
+database_spec.loader.exec_module(database_config)
+with open(workflow.source_path(config["qiime2version"]), "rb") as environment_file:
+    environment_id = hashlib.sha256(environment_file.read()).hexdigest()[:12]
+database_settings = dict(config, _database_environment_id=environment_id)
+try:
+    DATABASE_RESOURCES = {
+        family: database_config.resolve_database(database_settings, family)
+        for family in ("SILVA", "PR2")
+    }
+except ValueError as error:
+    raise WorkflowError(str(error)) from error
+
+SILVA_DB = DATABASE_RESOURCES["SILVA"]
+PR2_DB = DATABASE_RESOURCES["PR2"]
+SILVA_CLASSIFIER = SILVA_DB["classifier"]
+PR2_CLASSIFIER = PR2_DB["classifier"]
+SILVA_READY_MARKER = SILVA_DB["ready"]
+PR2_READY_MARKER = PR2_DB["ready"]
+PR2_BUILD_LOCK = PR2_DB["lock"]
+SILVA_BUILD_ROOT = SILVA_DB["build_root"]
+PR2_BUILD_ROOT = PR2_DB["build_root"]
+RUN_SILVA_SPECIES_MATCHING = SILVA_VERSION == "144"
+config["database_resources"] = DATABASE_RESOURCES
+
+# Only missing local builds need acquisition capability checks. These markers
+# also precede primer removal, so unsupported releases fail before FASTQ work.
+DATABASE_SETUP_CHECKS = [
+    os.path.join(record["build_root"], "capability.json")
+    for record in DATABASE_RESOURCES.values()
+    if record["mode"] == "train"
+    and not database_config.reusable_classifier(record["classifier"])
+]
+
+# The supplementary species reference belongs to the selected SILVA release,
+# not to an arbitrary classifier's parent directory. Never write beside a
+# user-supplied existing classifier.
 SILVA_SPECIES_REFERENCE_FILENAME = "silva_v144_assignSpecies.fa.gz"
 SILVA_SPECIES_REFERENCE_URL = (
     "https://www.arb-silva.de/fileadmin/silva_databases/release_144/"
@@ -233,75 +247,11 @@ SILVA_SPECIES_REFERENCE_URL = (
 )
 SILVA_SPECIES_REFERENCE_MD5 = "444de7c0cce0b66addda7a3f8b38e012"
 SILVA_SPECIES_REFERENCE = os.path.join(
-    DATABASE_DIR,
-    "classification",
-    "SILVA",
-    SILVA_SPECIES_REFERENCE_FILENAME,
-)
-PR2_CLASSIFIER = os.path.join(
-    DATABASE_DIR,
-    "classification",
-    "PR2",
-    "pr2_version_5.1.1_SSU_dada2.clean.culled.derep-sliced_"
-    + config["fwdPrimer"]
-    + "_"
-    + config["revPrimer"]
-    + "_dereplicated_final_classifier_qiime2-2026.7.qza",
-)
-PR2_READY_MARKER = os.path.join(
-    ".snakemake",
-    "database-ready",
-    "pr2-5.1.1-"
-    + config["fwdPrimer"]
-    + "-"
-    + config["revPrimer"]
-    + ".ready",
-)
-PR2_BUILD_LOCK = os.path.join(
-    DATABASE_DIR,
-    "classification",
-    "PR2",
-    ".pr2-5.1.1-"
-    + config["fwdPrimer"]
-    + "-"
-    + config["revPrimer"]
-    + ".lock",
+    DATABASE_DIR, "classification", "SILVA", SILVA_SPECIES_REFERENCE_FILENAME
 )
 
-required_preexisting_database_resources = []
-if USE_PREEXISTING_BBSPLIT_DATABASE:
-    required_preexisting_database_resources.append(
-        ("BBsplit", BBSPLIT_DB_DIR)
-    )
-if USE_PREEXISTING_SILVA_DATABASE:
-    required_preexisting_database_resources.extend(
-        [
-            ("SILVA classifier", SILVA_CLASSIFIER),
-            ("SILVA species reference", SILVA_SPECIES_REFERENCE),
-        ]
-    )
-if USE_PREEXISTING_PR2_DATABASE:
-    required_preexisting_database_resources.append(
-        ("PR2 classifier", PR2_CLASSIFIER)
-    )
-
-if required_preexisting_database_resources:
-    missing_database_resources = [
-        (label, path)
-        for label, path in required_preexisting_database_resources
-        if not os.path.exists(path)
-    ]
-    if missing_database_resources:
-        missing_list = "\n  - ".join(
-            f"{label}: {path}" for label, path in missing_database_resources
-        )
-        raise WorkflowError(
-            "One or more databases are marked as pre-existing, but the "
-            "following required resources were not found:\n  - "
-            + missing_list
-            + "\nCorrect database_dir or mark only the missing database "
-            "family as not pre-existing so the workflow prepares it."
-        )
+if USE_PREEXISTING_BBSPLIT_DATABASE and not os.path.isdir(BBSPLIT_DB_DIR):
+    raise WorkflowError("Pre-existing BBsplit database was not found: " + BBSPLIT_DB_DIR)
 
 # Small, user-facing files copied into a project-specific folder at the end of
 # the run. Older configs without projectName use studyName.
@@ -401,7 +351,7 @@ def get_final_output():
         #sample=samples["sample"], direction=["1","2"]
     )
 
-    final_output.extend([BBSPLIT_DB_DIR, SILVA_CLASSIFIER, PR2_READY_MARKER])
+    final_output.extend([BBSPLIT_DB_DIR, SILVA_READY_MARKER, PR2_READY_MARKER])
 #    final_output.append("results/02-proks/manifest.tsv"),
     final_output.append("results/02-proks/16S.qza"),
     final_output.append("results/02-proks/02-quality-plots-R1-R2/"),

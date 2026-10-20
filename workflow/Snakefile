@@ -12,9 +12,9 @@ configfile: "config/config.yml"
 # -----------------------------------------------------
 include: "rules/common.smk"
 
-# The release-pinned SILVA and PR2 classifiers are managed independently of
-# the reusable BBsplit database. Missing classifier artifacts are created once
-# in database_dir and then shared by future projects.
+# SILVA and PR2 independently select existing files, URLs, or local training.
+# Completed models are published in their selected database directories;
+# the common database_dir still holds BBsplit and supporting references.
 include: "rules/download_databases.smk"
 include: "rules/prepare_classification_dbs.smk"
 

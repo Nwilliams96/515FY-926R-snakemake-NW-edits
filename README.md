@@ -85,15 +85,18 @@ The executable classification steps are deliberately exposed as individual
 Snakemake rules. The high-level dependency order is:
 
 ```text
-PR2 5.1.1 reference
-  -> decompress -> reformat sequences/taxonomy -> QIIME imports
-  -> cull -> full-reference dereplication -> primer extraction
-  -> extracted-reference dereplication -> classifier training
-  -> validation + locked atomic publication
+SILVA or PR2 (selected independently)
+  -> existing classifier: validate and reuse
+  -> classifier URL: download -> validate + locked atomic publication
+  -> no URL: RESCRIPt reference acquisition -> visible preparation rules
+      SILVA: reverse transcribe -> cull -> length filter -> dereplicate
+      PR2: normalize rank prefixes -> cull -> dereplicate
+      -> primer extraction -> extracted-reference dereplication [amplicon mode]
+      -> classifier training -> validation + locked atomic publication
 
 canonical 16S ASVs
-  -> SILVA 144 classification -> SILVA taxonomy export --+
-  -> PR2 5.1.1 classification -> PR2 taxonomy export -----+
+  -> selected SILVA classification -> SILVA taxonomy export --+
+  -> selected PR2 classification -> export -> normalize -----+
                                                           |
                   TSV reconciliation (:plas, confidence >= 0.7)
                     -> resolved-taxonomy import
@@ -112,10 +115,31 @@ It is intentionally stored outside `main`, so ordinary pipeline clones do not
 include the review document. The full sequence of repository revisions is also available in the
 [GitHub commit history](https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/commits/main/).
 
-Prokaryotic ASVs are classified with the official SILVA 144 SSU Ref NR99
-uniform QIIME 2 classifier. With the pipeline's default 515Y/926R primers, the
-workflow downloads SILVA's matching V4–V5 region classifier and verifies its
-published checksum before placing it in the shared `database_dir`. The bundled
+The configuration site offers three independent choices for both SILVA and PR2:
+
+| Choice | Required fields | Pipeline behavior |
+|---|---|---|
+| Use existing databases | Existing trained classifier `.qza` path and declared release | Validate and reuse that exact file |
+| Download pre-trained database | Classifier URL, destination directory, and declared release | Download, validate, and reuse the completed classifier |
+| Train database with RESCRIPt | Reference release and destination directory | Acquire the reference and train through individual preparation rules |
+
+Only fields for the selected method are emitted in the setup package. Existing
+classifiers take precedence; otherwise a nonblank download URL selects the
+download route, and an absent/blank URL selects training. Download failures do
+not fall back silently to training. The default is SILVA 144 from the official
+pre-trained SSU Ref NR99 uniform classifier, together with local RESCRIPt
+preparation and training of PR2 5.1.1.
+
+For the default 515Y/926R primers, the official SILVA preset selects the matching
+V4–V5 classifier. Different primers select the known full-length preset instead.
+Changing a preset updates its URL and checksum together; a custom URL is never
+rewritten. Classifier release and region are declared by the user: QIIME artifact
+validation checks format and type, not the biological provenance of an arbitrary
+classifier. User-supplied models must match the intended region and QIIME
+environment and come from a trusted source. A known download includes its checksum; a custom classifier URL
+can omit a checksum but must still pass classifier-artifact validation.
+
+The bundled
 QIIME 2 2026.7 environment matches the version used to train that classifier.
 Older generated configs that still name this repository's bundled QIIME 2
 2024.5 or 2025.7 definition are automatically migrated to the 2026.7 definition.
@@ -131,7 +155,9 @@ report therefore include `Kingdom`. Taxonomy parsing is based on rank prefixes
 Order, Family, or Genus into the wrong columns. The official uniform QIIME 2
 classifier stops at Genus. The workflow therefore follows classification with
 an exact-match search against SILVA's official version 144 DADA2 species
-reference. An unambiguous exact match is accepted only when its genus agrees
+reference when the declared SILVA release is 144. Other releases retain their
+taxonomy without this augmentation, and the report explains that species
+matching was skipped. An unambiguous exact match is accepted only when its genus agrees
 with the QIIME 2 assignment. For example, an accepted match is appended as
 `s__Vibrio cholerae`, and the formatted outputs contain `Vibrio` in `Genus` and
 `Vibrio cholerae` in `Species`. Unmatched, ambiguous, or genus-conflicting ASVs
@@ -143,9 +169,13 @@ The chloroplast/cyanobacterial subsetting step accepts both the older
 `p__Cyanobacteria` label and SILVA 144's `p__Cyanobacteriota` label, preserving
 those downstream tables across the database transition.
 
-If non-default primers are entered, the workflow uses SILVA's official
-full-length classifier instead of applying the 515Y/926R-specific model to an
-incompatible region. PR2 remains the primary eukaryotic classifier.
+PR2 remains the primary eukaryotic classifier. The optional PR2 download route
+expects an already-trained QIIME classifier, not a reference FASTA.
+Use a classifier with the established nine-rank PR2 taxonomy. Whether acquired
+by reuse, download, or local training, PR2 classification exports have their
+rank prefixes normalized before downstream parsing. The small TSV helper
+changes only taxonomy notation and preserves identifiers and confidence; the
+unchanged confidence threshold still controls chloroplast reconciliation.
 
 The 18S branch classifies each ASV once with PR2. The resulting artifact is
 explicitly labelled PR2, passed through the established taxonomy-whitespace
@@ -153,28 +183,81 @@ normalization step, and then reused for the 18S bar plot, metazoan subsets, and
 the final merged table. No separate SILVA-labelled 18S classification is
 created.
 
-Both release-pinned classifiers and the SILVA species reference live in the
-shared `database_dir`. After this upgrade, the first run downloads the SILVA
-144 classifier, downloads the approximately 141 MB species reference, and
-builds a QIIME 2 2026.7-labelled PR2 classifier if they are not already present;
-later project clones reuse them. This one-time database setup also occurs when
-the corresponding pre-existing setting is `false`; later project clones reuse
-them. Database families are controlled independently with
-`use_preexisting_bbsplit_database`, `use_preexisting_silva_database`, and
-`use_preexisting_pr2_database`. Marking one as `true` requires its release- and
-primer-compatible files to exist under `database_dir`; marking it as `false`
-allows Snakemake to prepare it if missing. The older
-`use_preexisting_databases` setting remains supported as a BBsplit fallback.
+Examples of the three methods (choose a single method per database):
 
-PR2 construction is safe across simultaneous project runs. Each project writes
-its intermediate artifacts under `.snakemake/database-build/PR2/`; only a
-completed classifier is considered for shared publication. A filesystem lock
-serializes validation and atomic publication to `database_dir`. A project that
-finds an existing valid classifier reuses it without rebuilding. Independently
-started first-time builds can duplicate private construction work, but they
-cannot delete or expose one another's partial intermediates. Each project
-records only a local readiness marker, so Snakemake code-change detection does
-not make the shared classifier an ordinary temporary workflow output.
+```yaml
+# Existing SILVA; this file is validated, never replaced by the workflow.
+SILVAversion: "144"
+use_preexisting_silva_database: true
+silva_classifier: "/shared/classifiers/SILVA-144.qza"
+```
+
+```yaml
+# Official SILVA download; the configuration site fills the complete URL
+# and matching checksum for its known preset.
+SILVAversion: "144"
+use_preexisting_silva_database: false
+SILVA_download_link: "https://www.arb-silva.de/fileadmin/silva_databases/release_144/QIIME2/2026.7/SSU/V4V5-515f-926r/uniform/SILVA_144_SSURef_NR99_uniform_classifier_V4V5-515f-926r.qza"
+SILVA_download_md5: "f7757b01eb82e0ac78bf06427e410095"
+silva_database_dir: "/shared/databases/classification/SILVA"
+```
+
+```yaml
+# PR2 acquisition and local training; no PR2_download_link is supplied.
+PR2version: "5.1.1"
+use_preexisting_pr2_database: false
+pr2_database_dir: "/shared/databases/classification/PR2"
+```
+
+PR2 also accepts `pr2_classifier`, `PR2_download_link`, and `PR2_download_md5` for
+the equivalent reuse/download methods. Without a per-database directory, each
+classifier falls back to `<database_dir>/classification/SILVA` or
+`<database_dir>/classification/PR2`. Older reuse configurations without explicit
+classifier paths retain their recognized legacy paths. The common `database_dir`
+continues to hold BBsplit and supporting references, including the approximately
+141 MB SILVA 144 exact-species reference. Reusing a classifier does not require
+writing next to that classifier. The older `use_preexisting_databases` setting
+remains supported as a BBsplit fallback.
+
+RESCRIPt training preserves the original modular rule order. SILVA references
+include Bacteria, Archaea, and Eukaryota; the visible length-filter stage uses
+minimum lengths of 1,200, 900, and 1,400 nt respectively. These are explicitly
+selected and newly documented settings: the original length-filter helper is
+missing from the imported repository, so they are not claimed to reproduce its
+unknown historical contents. PR2 taxonomy is normalized to the established nine
+ranks while preserving organelle labels such as `:plas`.
+
+Both databases extract the configured primer region before training by default.
+For an advanced full-length build, edit the YAML-only settings:
+
+```yaml
+silva_reference_mode: "full_length"  # default: "amplicon"
+pr2_reference_mode: "full_length"    # default: "amplicon"
+```
+
+Full-length mode skips extraction and extracted-reference dereplication. These
+settings affect local training only; they cannot change a downloaded classifier.
+The installed RESCRIPt version must support the requested reference release.
+The pinned environment currently cannot acquire SILVA 144 natively, so use the
+official download or a compatible pre-existing classifier for that release.
+The workflow checks this limitation before sample processing.
+
+Classifier construction uses project-private intermediates under
+`.snakemake/database-build/`. Locks serialize validation and atomic publication
+to the selected destination. Compatible completed downloads and trained models
+are reused; separate identities prevent different URLs, releases, recipes, or
+training regions from silently sharing a classifier. Independent first-time
+projects can duplicate private training work but cannot delete one another's
+intermediates. Local readiness markers keep shared classifiers out of ordinary
+Snakemake output cleanup.
+
+BBsplit still uses the original SILVA 132/PR2 OSF reference FASTAs and the
+existing indexing command. Its downloads now use the verified downloader with
+exact destination paths, preventing absolute paths from being prefixed by the
+project directory or renamed with `.1`, `.2`, and similar suffixes. Existing
+misplaced copies are not removed automatically. This fixes downloading, not
+concurrent first-time BBsplit indexing: prepare that shared index once before
+starting several analyses against it.
 
 ## DADA2 controls
 
@@ -236,11 +319,10 @@ are assembled, so numeric-only IDs and leading zeroes are retained correctly.
 DADA2 export scripts also propagate failures from QIIME and BIOM commands rather
 than allowing a failed piped command to appear successful.
 
-When databases must be built, the official pre-trained SILVA classifier is
-downloaded while PR2 preparation proceeds independently. BBSplit indexing and
-PR2 primer extraction use up to eight cores. QIIME's naive-Bayes classifier-
-training action does not expose a worker-count option, so the final PR2
-classifier-training command remains single-core.
+Database families are prepared independently according to their selected
+methods. BBSplit indexing and primer extraction use up to eight cores. QIIME's
+naive-Bayes classifier-training action does not expose a worker-count option,
+so final classifier training remains single-core.
 
 ## Run report
 
@@ -250,7 +332,9 @@ The final workflow target creates a self-contained report at:
 results/07-report/<studyName>.pipeline-report.html
 ```
 
-The report summarizes the configuration, raw read pairs per sample, primer
+The report records each classifier's declared release, preparation method,
+path, storage directory, download URL when supplied, and effective training
+region. It also summarizes the configuration, raw read pairs per sample, primer
 trimming and BBsplit assignment loss, reads retained per sample after DADA2,
 stage-specific DADA2 loss, sample-level quality control, domain composition,
 16S/18S/chloroplast/mitochondrial assignments, unassigned sequences, abundant

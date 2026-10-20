@@ -1103,6 +1103,11 @@ def species_assignment_table(rows):
     if not rows:
         return '<p class="small-muted">SILVA species-matching results were not available.</p>'
     row = rows[0]
+    if str(row.get("status", "")).lower() == "skipped":
+        return (
+            '<p class="note"><strong>Species matching skipped.</strong> '
+            f'{esc(row.get("reason") or "No matching species reference was configured.")}</p>'
+        )
     return (
         '<div class="cards">'
         f'<div class="card"><strong>{fmt_count(row.get("total_16S_ASVs"))}</strong><span>16S ASVs checked</span></div>'
@@ -1112,6 +1117,64 @@ def species_assignment_table(rows):
         f'<div class="card"><strong>{fmt_count(row.get("exact_matches_withheld_by_genus_check"))}</strong><span>exact matches withheld by genus check</span></div>'
         f'<div class="card"><strong>{fmt_count(row.get("unmatched_or_ambiguous"))}</strong><span>unmatched or ambiguous</span></div>'
         '</div>'
+    )
+
+
+def database_resources_table(config):
+    """Describe the selected classifier sources without inferring their release.
+
+    QIIME artifact validation confirms format/type, not the biological database
+    release or primer region. Keep declared provenance distinct from validation.
+    Older reports can still show their configured versions and supplied paths.
+    """
+    resources = config.get("database_resources") or {}
+    mode_labels = {
+        "existing": "Use existing databases",
+        "download": "Download pre-trained database",
+        "train": "Train database with RESCRIPt",
+    }
+    body = []
+    for database, default_version in (("SILVA", "144"), ("PR2", "5.1.1")):
+        resource = resources.get(database) or {}
+        lower = database.lower()
+        version_key = "SILVAversion" if database == "SILVA" else "PR2version"
+        version = resource.get("version") or config.get(version_key, default_version)
+        mode = resource.get("mode")
+        body.append(
+            f"<tr><th>{esc(database)}</th><td>Declared release</td><td>{esc(version)}</td></tr>"
+            f"<tr><th>{esc(database)}</th><td>Preparation method</td>"
+            f"<td>{esc(mode_labels.get(mode, 'Not recorded in this legacy configuration'))}</td></tr>"
+        )
+        details = [
+            ("Classifier path", resource.get("classifier") or config.get(f"{lower}_classifier")),
+            ("Storage directory", resource.get("directory") or config.get(f"{lower}_database_dir")),
+            ("Download URL", resource.get("url") or config.get(f"{database}_download_link")),
+            ("Checksum", resource.get("checksum")),
+        ]
+        region = resource.get("classifier_region") or resource.get("reference_mode")
+        if region:
+            details.append(("Reference region", {
+                "amplicon": "Configured primer region",
+                "full_length": "Full-length SSU reference",
+            }.get(region, region)))
+        elif mode in ("existing", "download"):
+            details.append(("Reference region", "As supplied by the classifier"))
+        if mode == "train":
+            details.extend(("Training — " + name, value) for name, value in
+                           (resource.get("training_settings") or {}).items())
+        for name, value in details:
+            if value is not None and str(value).strip():
+                body.append(
+                    f"<tr><th>{esc(database)}</th><td>{esc(name)}</td>"
+                    f"<td><code>{esc(value)}</code></td></tr>"
+                )
+    return (
+        '<div class="table-wrap"><table><thead><tr><th>Database</th><th>Setting</th>'
+        '<th>Value</th></tr></thead><tbody>' + "".join(body) + '</tbody></table></div>'
+        '<p class="small-muted">Releases are declared in the configuration. Artifact validation '
+        'does not verify the reference release or training region of a user-supplied classifier. '
+        'Existing and downloaded classifiers must match the intended reference and QIIME 2 '
+        'environment; training-region settings affect only local RESCRIPt training.</p>'
     )
 
 
@@ -1195,6 +1258,19 @@ def render_report(config, paths, output_path):
         else []
     )
     species_assignment_html = species_assignment_table(species_assignment_rows)
+    silva_version = str(config.get("SILVAversion", "144"))
+    species_heading = f"SILVA {esc(silva_version)} species matching"
+    species_description = (
+        '<p>Species labels are added only when a genus-classified SILVA 16S ASV has an '
+        'unambiguous exact sequence match in SILVA 144 and the matched genus agrees '
+        'with the QIIME 2 genus assignment. A blank Species value can mean that no exact '
+        'match was found, the exact match was ambiguous, or the genus checks disagreed; '
+        'it does not mean that the ASV has no close relatives.</p>'
+        if silva_version == "144" else
+        '<p>The selected SILVA release is retained without adding species labels from '
+        'another release. Exact species matching is currently supported only for SILVA 144.</p>'
+    )
+    database_resources_html = database_resources_table(config)
     chloroplast_audit_rows = (
         read_tsv(paths["chloroplast_audit"])
         if paths.get("chloroplast_audit") and Path(paths["chloroplast_audit"]).is_file()
@@ -1447,7 +1523,12 @@ details{{border:1px solid var(--line);border-radius:10px;margin:12px 0;padding:0
 <section id="overview"><div class="eyebrow">Run at a glance</div><h2>Analysis overview</h2>
 <div class="cards"><div class="card"><strong>{len(sample_names):,}</strong><span>configured samples</span></div><div class="card"><strong>{fmt_count(split_total)}</strong><span>reads assigned by 16S/18S split</span></div><div class="card"><strong>{fmt_count(final16 + final18)}</strong><span>non-chimeric reads after DADA2</span></div><div class="card"><strong>{len(asvs):,}</strong><span>observed ASVs</span></div><div class="card"><strong>{fmt_percent(median_retention)}</strong><span>median DADA2 retention</span></div></div>
 <p class="note">This is a rapid quality-control summary, not a substitute for inspecting unusual samples, QIIME 2 quality visualizations, or the full result tables.</p></section>
-<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2><h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}<h3>SILVA 144 species matching</h3><p>Species labels are added only when a genus-classified SILVA 16S ASV has an unambiguous exact sequence match in SILVA 144 and the matched genus agrees with the QIIME 2 genus assignment. A blank Species value can mean that no exact match was found, the exact match was ambiguous, or the genus checks disagreed; it does not mean that the ASV has no close relatives.</p>{species_assignment_html}<h3>PR2 plastid cross-check</h3><p>Every unique 16S ASV was independently classified with PR2. PR2 replaces SILVA only when the PR2 lineage contains the explicit <code>:plas</code> marker and meets the configured confidence threshold. This can rescue chloroplast ASVs that SILVA 144 placed among bacteria while preserving SILVA for all non-plastid calls. The complete per-ASV decision table is included in Results-Export.</p>{chloroplast_resolution_html}<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
+<section id="parameters"><div class="eyebrow">Reproducibility</div><h2>Parameters used</h2>
+<h3>Reference databases and preparation</h3>{database_resources_html}
+<h3>16S and 18S correction factors</h3><p>These are the exact multiplicative factors used to reconcile the starting 16S/18S amplicon molar mixture with the proportions assigned by BBsplit. Each factor is the starting molar fraction divided by the observed read fraction; DADA2 retention correction is applied separately downstream.</p>{correction_factors_html}
+<h3>{species_heading}</h3>{species_description}{species_assignment_html}
+<h3>PR2 plastid cross-check</h3><p>Every unique 16S ASV was independently classified with PR2. PR2 replaces SILVA only when the PR2 lineage contains the explicit <code>:plas</code> marker and meets the configured confidence threshold. This can rescue chloroplast ASVs that the selected SILVA classifier placed among bacteria while preserving SILVA for all non-plastid calls. The complete per-ASV decision table is included in Results-Export.</p>{chloroplast_resolution_html}
+<h3>Effective DADA2 settings used</h3><p>This table records the values actually applied by the pipeline. For an older config without a <code>dada2</code> block, the workflow defaults are shown.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>Parameter</th><th>Value</th><th>What it controls</th></tr></thead><tbody>{dada2_parameter_rows}</tbody></table></div><h3>Complete configuration</h3><div class="table-wrap"><table><tbody>{parameter_rows}</tbody></table></div></section>
 <section id="quality"><div class="eyebrow">Read processing and DADA2</div><h2>Reads before filtering and quality control</h2><p>These are raw paired-end records reported by Cutadapt before primer removal or other pipeline filtering. One read pair is counted once so it remains comparable with the amplicon counts retained after DADA2.</p>{raw_reads_chart}<h2>Primer trimming and BBsplit assignment</h2><p>Primer-trimming loss counts read pairs discarded by Cutadapt before BBsplit, primarily because the required primers were not detected. BBsplit loss counts the trimmed read pairs that were not assigned to either the 16S or 18S reference bin. Each percentage is calculated from the immediately preceding stage.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Raw pairs</th><th>Primer-trimming loss</th><th>Pairs entering BBsplit</th><th>BBsplit unassigned</th><th>Assigned 16S</th><th>Assigned 18S</th><th>Total assigned</th></tr></thead><tbody>{pre_dada2_summary_row}{''.join(pre_dada2_rows)}</tbody></table></div><h2>QIIME 2 sequence-quality profiles</h2><p>These profiles are reconstructed directly from the seven-number summaries stored in the QIIME 2 <code>demux summarize</code> visualizations. The dark line is the median quality score at each base, the darker band spans the 25th–75th percentiles, and the lighter band spans the 9th–91st percentiles. The paired 18S plots show reads before length trimming and concatenation; the final 18S plot shows the concatenated reads supplied to DADA2.</p>{quality_profiles}<h2>Where reads were lost in DADA2</h2><p>Each loss is shown as a read count and the percentage lost from the immediately preceding stage. Filtering covers DADA2 quality filtering and truncation; denoising applies the learned error model; pair merging applies only to paired 16S reads; and the final loss is chimera removal. The 18S reads were concatenated before entering single-end DADA2, so pair merging is not applicable to that path.</p><div class="table-wrap"><table><thead><tr><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{dada2_summary_rows}</tbody></table></div><h3>DADA2 losses by sample</h3><p>Use this table to identify whether an individual sample loses most reads during filtering, denoising, paired-read merging, or chimera removal. Values below 40% total retention are highlighted for review; these thresholds are guides rather than automatic pass/fail criteria.</p><div class="table-wrap"><table><thead><tr><th>Sample</th><th>Path</th><th>DADA2 input</th><th>Filtering loss</th><th>Denoising loss</th><th>Pair-merging loss</th><th>Chimera-removal loss</th><th>Final reads</th><th>Total retention</th></tr></thead><tbody>{''.join(dada2_sample_rows)}</tbody></table></div><h2>Reads retained after DADA2</h2><p>Each bar is the sample's combined non-chimeric 16S and 18S abundance after DADA2 filtering, denoising, 16S pair merging, and chimera removal.</p>{post_dada2_chart}</section>
 <section id="composition"><div class="eyebrow">Basic bar plots</div><h2>Domain composition by sample</h2><p>Bars show relative abundance from <code>{esc(abundance_column)}</code>. Hover over a segment for its value.</p>{domain_chart}<h3>Sequence assignments</h3><p>This breakdown uses the pipeline's <code>Sequence_Type</code> field and taxonomy labels. The broad 16S total includes prokaryotic, chloroplast, and mitochondrial 16S. The figure itself uses mutually exclusive categories, so each sequence count appears in only one bar.</p><div class="cards"><div class="card"><strong>{fmt_count(total_16s)}</strong><span>total 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Eukaryotic 18S'])}</strong><span>eukaryotic 18S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Chloroplast 16S'])}</strong><span>chloroplast 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Mitochondrial 16S'])}</strong><span>mitochondrial 16S</span></div><div class="card"><strong>{fmt_count(assignment_totals['Unassigned'])}</strong><span>unassigned</span></div></div>{assignment_chart}<h3>Sequence-assignment counts</h3><div class="table-wrap"><table><thead><tr><th>Assignment</th><th>Sequence abundance</th><th>Share of all assignments</th></tr></thead><tbody>{assignment_rows}</tbody></table></div><p class="note"><strong>Total 16S</strong> is a summary row and overlaps its three 16S subcategories; the remaining rows and the figure are mutually exclusive.</p></section>
 <section id="taxa"><div class="eyebrow">Taxonomic summary</div><h2>Interactive taxonomy bar plot</h2><p>This QIIME 2-style view shows each sample as a 100% stacked bar. Choose a taxonomy level, then order the bars by SampleID, Condition, Latitude, Longitude, or Depth. When a metadata variable is selected, you can optionally display only one value. Counts use <code>{esc(abundance_column)}</code>; hover over a colored segment for its taxon, relative abundance, and count.</p><div class="explorer-controls"><div class="explorer-control"><label for="taxonomy-rank">Taxonomy level</label><select id="taxonomy-rank"></select></div><div class="explorer-control"><label for="taxonomy-plot-field">Plot samples by</label><select id="taxonomy-plot-field"></select></div><div class="explorer-control"><label for="taxonomy-metadata-value">Filter plotted value</label><select id="taxonomy-metadata-value"></select></div></div><p id="taxonomy-filter-summary" class="small-muted" aria-live="polite"></p><div id="taxonomy-explorer-chart" class="taxonomy-chart" aria-label="Interactive relative taxonomic abundance by sample"></div><div id="taxonomy-explorer-legend" class="chart-legend" aria-label="Taxonomy legend"></div><h3>Top taxa table</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Relative abundance</th><th>Samples detected</th></tr></thead><tbody id="taxonomy-explorer-body"></tbody></table></div><noscript><p class="note">Interactive controls require JavaScript. This static summary uses all samples and the first informative SILVA or PR2 rank.</p>{taxa_chart}<div class="table-wrap"><table><thead><tr><th>#</th><th>Taxon</th><th>Total abundance</th><th>Samples detected</th></tr></thead><tbody>{top_taxa_rows}</tbody></table></div></noscript></section>

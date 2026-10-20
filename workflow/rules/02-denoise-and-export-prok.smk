@@ -98,6 +98,10 @@ rule denoise_prok_dada2_with_unmerged:
 rule classify_unmerged_16S_with_SILVA:
     input:
         sequences=rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs,
+        # A local readiness marker schedules download/training/validation while
+        # keeping the shared classifier outside Snakemake's output cleanup.
+        database_ready=rules.ensure_silva_classifier.output.marker,
+    params:
         classDB=SILVA_CLASSIFIER,
     output:
         classified="results/02-proks/11-unmerged-16S-rescue/SILVA.classified.qza"
@@ -208,9 +212,9 @@ rule export_unmerged_16S_PR2_taxonomy:
     input:
         rules.classify_unmerged_16S_with_PR2.output.classified
     output:
-        temp(".snakemake/classification-exports/unmerged-16S/PR2/taxonomy.tsv")
+        temp(".snakemake/classification-exports/unmerged-16S/PR2-raw/taxonomy.tsv")
     params:
-        export_dir=".snakemake/classification-exports/unmerged-16S/PR2"
+        export_dir=".snakemake/classification-exports/unmerged-16S/PR2-raw"
     conda:
         config["qiime2version"]
     log:
@@ -219,6 +223,20 @@ rule export_unmerged_16S_PR2_taxonomy:
         "mkdir -p {params.export_dir:q} && "
         "qiime tools export --input-path {input:q} --output-path {params.export_dir:q} "
         "> {log:q} 2>&1"
+
+
+rule normalize_unmerged_16S_PR2_rank_prefixes:
+    input:
+        taxonomy=rules.export_unmerged_16S_PR2_taxonomy.output
+    output:
+        normalized=temp(".snakemake/classification-exports/unmerged-16S/PR2/taxonomy.tsv")
+    log:
+        "logs/02-denoise-and-export-prok/11-normalize-PR2-rank-prefixes.log"
+    # Normalize the Taxon column only. RESCRIPt's edit-taxonomy action accepts
+    # a taxonomy Series and discards Confidence; the supplement needs the
+    # original confidence values for its unchanged plastid threshold.
+    script:
+        "../scripts/normalize_pr2_taxonomy.py"
 
 
 rule convert_unmerged_16S_retained_biom:
@@ -255,7 +273,7 @@ rule export_unmerged_16S_supplement:
         standard_table_tsv=rules.convert_unmerged_16S_standard_biom.output,
         sequence_fasta=rules.export_unmerged_16S_sequences.output,
         silva_export=rules.export_unmerged_16S_SILVA_taxonomy.output,
-        pr2_export=rules.export_unmerged_16S_PR2_taxonomy.output,
+        pr2_export=rules.normalize_unmerged_16S_PR2_rank_prefixes.output.normalized,
     output:
         table=UNMERGED_16S_TABLE,
         summary=UNMERGED_16S_SUMMARY,
@@ -283,6 +301,8 @@ rule export_DADA2_results:
 rule classify_ASVs:
     input:
         sequences="results/02-proks/03-DADA2d/representative_sequences.qza",
+        database_ready=rules.ensure_silva_classifier.output.marker,
+    params:
         classDB=SILVA_CLASSIFIER,
     output:
         directory("results/02-proks/05-classified/"),
@@ -372,9 +392,9 @@ rule export_PR2_taxonomy_for_plastid_resolution:
     input:
         rules.classify_all_16S_with_PR2.output.classified
     output:
-        temp(".snakemake/classification-exports/canonical-16S/PR2/taxonomy.tsv")
+        temp(".snakemake/classification-exports/canonical-16S/PR2-raw/taxonomy.tsv")
     params:
-        export_dir=".snakemake/classification-exports/canonical-16S/PR2"
+        export_dir=".snakemake/classification-exports/canonical-16S/PR2-raw"
     conda:
         config["qiime2version"]
     log:
@@ -385,10 +405,24 @@ rule export_PR2_taxonomy_for_plastid_resolution:
         "> {log:q} 2>&1"
 
 
+rule normalize_canonical_16S_PR2_rank_prefixes:
+    input:
+        taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output
+    output:
+        normalized=temp(".snakemake/classification-exports/canonical-16S/PR2/taxonomy.tsv")
+    log:
+        "logs/02-denoise-and-export-prok/09-normalize-PR2-rank-prefixes.log"
+    # Keep classifier confidence and feature IDs intact. Only prefixed rank
+    # notation changes, so PR2 lineages cannot masquerade as SILVA taxonomy.
+    # Reconciliation still applies the same >=0.7 plastid threshold afterward.
+    script:
+        "../scripts/normalize_pr2_taxonomy.py"
+
+
 rule resolve_PR2_plastids:
     input:
         silva_taxonomy=rules.export_SILVA_taxonomy_for_plastid_resolution.output,
-        pr2_taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output,
+        pr2_taxonomy=rules.normalize_canonical_16S_PR2_rank_prefixes.output.normalized,
     output:
         taxonomy_tsv=temp("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-resolved-taxonomy.tsv"),
         audit="results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-routing-audit.tsv",
@@ -466,16 +500,20 @@ rule export_tax_convert_biom:
     script:
         "../scripts/P10a-generate-biom-tables.sh"
 
-rule assign_SILVA_144_species:
+rule assign_SILVA_species:
     input:
         taxonomy=rules.export_tax_convert_biom.output.genus_mergedtaxtsv,
         sequences=rules.export_DADA2_results.output.latestseqs,
-        species_reference=SILVA_SPECIES_REFERENCE,
+        # The exact-match reference belongs to release 144 only. Older
+        # classifiers pass their taxonomy through without loading this file.
+        species_reference=([SILVA_SPECIES_REFERENCE] if RUN_SILVA_SPECIES_MATCHING else []),
     output:
         taxonomy="results/02-proks/10-exports/" + config["studyName"] + ".taxonomy.tsv",
-        summary="results/02-proks/10-exports/" + config["studyName"] + ".SILVA-144.species-assignment-summary.tsv",
+        summary="results/02-proks/10-exports/" + config["studyName"] + ".SILVA-" + SILVA_VERSION + ".species-assignment-summary.tsv",
     params:
         chunk_size=500,
+        enabled=RUN_SILVA_SPECIES_MATCHING,
+        silva_version=SILVA_VERSION,
     conda:
         config["qiime2version"]
     threads: 1
@@ -491,7 +529,7 @@ rule assign_SILVA_144_species:
 
 rule add_tax_to_biom:
     input:
-        mergedtaxtsv=rules.assign_SILVA_144_species.output.taxonomy,
+        mergedtaxtsv=rules.assign_SILVA_species.output.taxonomy,
         all16Stable_biom="results/02-proks/10-exports/" + config["studyName"] + ".all-16S-seqs.biom",
         noarch_biom="results/02-proks/10-exports/" + config["studyName"] + ".exclude_d__Archaea_filtered_table.biom",
         nomito_biom="results/02-proks/10-exports/" + config["studyName"] + ".exclude_f__Mitochondria_filtered_table.biom",
