@@ -178,7 +178,7 @@ rule export_unmerged_16S_sequences:
     input:
         rules.denoise_prok_dada2_with_unmerged.output.prokrepseqs
     output:
-        temp(".snakemake/classification-exports/unmerged-16S/sequences/dna-sequences.fasta")
+        temp(".snakemake/classification-exports/unmerged-16S/sequences/linked-dna-sequences.fasta")
     params:
         export_dir=".snakemake/classification-exports/unmerged-16S/sequences"
     conda:

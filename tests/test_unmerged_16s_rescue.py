@@ -14,6 +14,19 @@ SPEC.loader.exec_module(RESCUE)
 
 
 class Unmerged16SRescueTests(unittest.TestCase):
+    def test_linked_sequence_export_declares_qiime_linked_fasta_name(self):
+        rules = (SCRIPTS.parent / "rules/02-denoise-and-export-prok.smk").read_text()
+        export_rule = rules.split("rule export_unmerged_16S_sequences:", 1)[1].split(
+            "\nrule ", 1
+        )[0]
+        # Retained pairs export as LinkedDNASequencesDirectoryFormat, not the
+        # DNASequencesDirectoryFormat filename used by canonical merged ASVs.
+        self.assertIn(
+            'temp(".snakemake/classification-exports/unmerged-16S/sequences/linked-dna-sequences.fasta")',
+            export_rule,
+        )
+        self.assertNotIn("/sequences/dna-sequences.fasta", export_rule)
+
     def test_biom_reader_skips_header_comment(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "table.tsv"

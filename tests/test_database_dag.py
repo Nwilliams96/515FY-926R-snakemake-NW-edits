@@ -176,6 +176,11 @@ class DatabaseDagTests(unittest.TestCase):
             self.assertIn(".snakemake/classification-exports/canonical-16S/PR2/taxonomy.tsv", resolver)
             supplement = output.split("rule export_unmerged_16S_supplement:", 1)[1].split("output:", 1)[0]
             self.assertIn(".snakemake/classification-exports/unmerged-16S/PR2/taxonomy.tsv", supplement)
+            self.assertIn(
+                ".snakemake/classification-exports/unmerged-16S/sequences/linked-dna-sequences.fasta",
+                supplement,
+            )
+            self.assertNotIn("/sequences/dna-sequences.fasta", supplement)
             euk_export = output.split("rule export_tax_convert_biom_euk:", 1)[1].split("output:", 1)[0]
             self.assertIn("DAG-fixture_PR2.normalized.classified.qza", euk_export)
             self.assertIn("rule assign_SILVA_species:", output)
