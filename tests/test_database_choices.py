@@ -1,5 +1,6 @@
 """Exercise routing and cache identity without downloading scientific data."""
 
+import ast
 import hashlib
 import importlib.util
 import itertools
@@ -41,6 +42,28 @@ def write_classifier(path, semantic_type="TaxonomicClassifier", provenance_type=
 
 
 class DatabaseChoiceTests(unittest.TestCase):
+    def test_bbsplit_reuse_uses_only_the_specific_setting(self):
+        source = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
+        preamble = ast.parse(source.split("# SILVA 144 classifiers", 1)[0])
+        assignment = next(
+            node for node in preamble.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name)
+                    and target.id == "USE_PREEXISTING_BBSPLIT_DATABASE"
+                    for target in node.targets)
+        )
+        expression = compile(ast.Expression(assignment.value), "common.smk", "eval")
+        for config, expected in (
+            ({}, False),
+            ({"use_preexisting_databases": True}, False),
+            ({"use_preexisting_bbsplit_database": True}, True),
+            ({"use_preexisting_bbsplit_database": False,
+              "use_preexisting_databases": True}, False),
+        ):
+            with self.subTest(config=config):
+                self.assertIs(eval(expression, {"config": config}), expected)
+        self.assertNotIn('"use_preexisting_databases"', source)
+
     def base_config(self, root):
         return dict(
             database_dir=str(Path(root) / "shared databases"),

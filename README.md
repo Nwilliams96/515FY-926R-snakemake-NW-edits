@@ -216,8 +216,8 @@ classifier falls back to `<database_dir>/classification/SILVA` or
 classifier paths retain their recognized legacy paths. The common `database_dir`
 continues to hold BBsplit and supporting references, including the approximately
 141 MB SILVA 144 exact-species reference. Reusing a classifier does not require
-writing next to that classifier. The older `use_preexisting_databases` setting
-remains supported as a BBsplit fallback.
+writing next to that classifier. BBsplit reuse is controlled only by
+`use_preexisting_bbsplit_database`; if omitted, it defaults to `false`.
 
 RESCRIPt training preserves the original modular rule order. SILVA references
 include Bacteria, Archaea, and Eukaryota; the visible length-filter stage uses

@@ -3,9 +3,6 @@
 Only capability inspection is performed here. Acquisition and all scientific
 reference preparation remain separate, visible Snakemake rules.
 
-AI-assisted change — three database choices, see the local provenance ledger.
-Purpose: reject unsupported native acquisition before expensive read processing.
-Human review status: pending.
 """
 
 import json

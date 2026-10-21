@@ -6,9 +6,6 @@ SILVA lineages by their d__ prefix. Normalize only taxonomy text after export.
 RESCRIPt edit-taxonomy is suitable for reference lineages but returns a Series,
 so using it on classification results would discard their Confidence column.
 
-AI-assisted change — three database choices, see the local provenance ledger.
-Purpose: keep externally trained PR2 models compatible without losing confidence.
-Human review status: pending.
 """
 
 import csv

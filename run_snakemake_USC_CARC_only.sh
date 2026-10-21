@@ -11,11 +11,6 @@
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
-# AI-assisted change — see provenance ledger linked from README.md, commits a99d5d5, 7add214,
-# and dad64a7.
-# Purpose: schedule the workflow within CARC limits, isolate Conda package
-# caches per job, and repair transferred config timestamps safely.
-# Human review status: pending.
 
 set -euo pipefail
 

@@ -1,7 +1,3 @@
-# AI-assisted change — three database choices, human review pending.
-# Purpose: preserve named scientific steps while selecting local reuse,
-# classifier download, or RESCRIPt training independently for each database.
-# Configuration/path resolution and publication helpers contain no training.
 
 def classifier_source(record):
     if record["mode"] == "existing" or database_config.reusable_classifier(

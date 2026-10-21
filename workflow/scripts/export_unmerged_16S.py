@@ -6,10 +6,6 @@ from collections import Counter
 from pathlib import Path
 
 
-# AI-assisted change — see provenance ledger linked from README.md, commit f13649a.
-# Purpose: construct the optional linked/unmerged 16S supplement after the
-# QIIME and BIOM exports have been made visible as individual Snakemake rules.
-# Human review status: pending.
 
 
 AUDIT_COLUMNS = [

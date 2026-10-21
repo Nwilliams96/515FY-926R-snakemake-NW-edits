@@ -6,20 +6,8 @@ import pandas as pd
 from snakemake.exceptions import WorkflowError
 from snakemake.utils import validate
 
-# AI-assisted change — see provenance ledger linked from README.md, commits 18ead1d and 72c8c7c.
-# Purpose: configure BBsplit, SILVA, and PR2 independently while preserving
-# legacy configuration behavior and keeping databases outside project clones.
-# Human review status: pending.
-# Resolve optional workflow branches and the shared database location once so
-# every rule uses the same paths. Database files always live outside the
-# run-specific repository clone.
-# The three database families can be managed independently. The legacy setting
-# remains the fallback for BBsplit because that was the only database branch it
-# controlled. SILVA and PR2 retain their historical create-if-missing behavior
-# when the new settings are absent.
 USE_PREEXISTING_BBSPLIT_DATABASE = config.get(
-    "use_preexisting_bbsplit_database",
-    config.get("use_preexisting_databases", False),
+    "use_preexisting_bbsplit_database", False
 )
 USE_PREEXISTING_SILVA_DATABASE = config.get(
     "use_preexisting_silva_database", False
@@ -51,9 +39,6 @@ config["PR2version"] = PR2_VERSION
 for family in ("silva", "pr2"):
     config[family + "_reference_mode"] = config.get(family + "_reference_mode", "amplicon")
 
-# AI-assisted change — see provenance ledger linked from README.md, commit 92f67ee.
-# Purpose: recover confident PR2 plastids before ecological category splitting.
-# Human review status: pending.
 # PR2 is now used as an independent plastid screen for every 16S ASV.  A PR2
 # lineage replaces SILVA only when it contains the explicit PR2 plastid marker
 # ":plas" and its classifier confidence meets this threshold.  Keeping the
@@ -65,10 +50,6 @@ CHLOROPLAST_PR2_MIN_CONFIDENCE = float(
 if not 0 <= CHLOROPLAST_PR2_MIN_CONFIDENCE <= 1:
     raise WorkflowError("chloroplast_pr2_min_confidence must be between 0 and 1")
 
-# AI-assisted change — see provenance ledger linked from README.md, commits f7aba4f and f13649a.
-# Purpose: expose reproducible DADA2 controls and retain a separate linked-read
-# sensitivity output without changing the canonical merged-ASV analysis.
-# Human review status: pending.
 # DADA2 parameters are configurable per marker-gene path. These fallbacks are
 # the values used by the workflow before the controls were exposed, so older
 # study configs remain reproducible after updating the pipeline.
@@ -107,9 +88,6 @@ DADA2_EUK = {**DADA2_EUK_DEFAULTS, **DADA2_EUK_CONFIG}
 # canonical abundance, richness, taxonomy, or internal-standard outputs.
 RUN_UNMERGED_16S_RESCUE = True
 
-# AI-assisted change — see provenance ledger linked from README.md, commits bdc17ea and f380a1b.
-# Purpose: support any positive number of genomic 16S or 18S standards.
-# Human review status: pending.
 # New configs store internal standards as an ordered YAML list. Continue to
 # accept the older intstd1/intstd2/intstd3 mapping so existing studies remain
 # runnable after updating the workflow.
@@ -261,9 +239,6 @@ if not re.fullmatch(r"[A-Za-z0-9._-]+", PROJECT_NAME):
         "projectName may contain only letters, numbers, periods, underscores, "
         "and hyphens"
     )
-# AI-assisted change — see provenance ledger linked from README.md, commits b73f253 and 8fb177b.
-# Purpose: collect user-facing outputs in a project-named download directory.
-# Human review status: pending.
 RESULTS_EXPORT_DIR = PROJECT_NAME + "-Results-Export"
 RESULTS_LONG_DATA = (
     ISD_FILTERED_LONG_TABLE

@@ -1,8 +1,5 @@
 """Resolve classifier choices and paths; scientific steps stay in Snakemake.
 
-AI-assisted change — database-choice patch, human review pending.
-Purpose: give existing files, URL downloads, and local training distinct
-identities without hiding any reference preparation commands in Python.
 """
 
 import hashlib

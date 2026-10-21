@@ -380,7 +380,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn('str_detect(Taxonomy, regex(":plas|', source)
         self.assertIn('plastid_16S_rRNA == "yes" ~ "Chloroplast_16S"', source)
 
-    def test_ai_annotations_link_to_hosted_provenance_ledger(self):
+    def test_provenance_is_documented_without_inline_ai_boilerplate(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         ledger_url = (
             "https://github.com/Nwilliams96/515FY-926R-snakemake-NW-edits/"
@@ -388,7 +388,7 @@ class DatabaseGenerationTests(unittest.TestCase):
         )
         self.assertIn(ledger_url, readme)
         self.assertFalse((ROOT / "CODE_PROVENANCE.md").exists())
-        annotated_files = [
+        runtime_files = [
             ROOT / "workflow/rules/common.smk",
             ROOT / "workflow/rules/prepare_classification_dbs.smk",
             ROOT / "workflow/rules/02-denoise-and-export-prok.smk",
@@ -402,17 +402,18 @@ class DatabaseGenerationTests(unittest.TestCase):
             ROOT / "workflow/scripts/generate_pipeline_report.py",
             ROOT / "workflow/scripts/P03-DADA2.sh",
             ROOT / "workflow/scripts/E08-DADA2.sh",
+            ROOT / "workflow/scripts/check_reference_capability.py",
+            ROOT / "workflow/scripts/database_config.py",
+            ROOT / "workflow/scripts/download_verified_reference.py",
+            ROOT / "workflow/scripts/normalize_pr2_taxonomy.py",
             ROOT / "run_snakemake_USC_CARC_only.sh",
         ]
-        annotation_blocks = []
-        for path in annotated_files:
-            lines = path.read_text(encoding="utf-8").splitlines()
-            for index, line in enumerate(lines):
-                if "AI-assisted change" in line:
-                    annotation_blocks.extend(lines[index : index + 4])
-        hashes = set(re.findall(r"\b[0-9a-f]{7}\b", "\n".join(annotation_blocks)))
-        self.assertTrue(hashes)
-        self.assertIn("provenance ledger linked from README.md", "\n".join(annotation_blocks))
+        for path in runtime_files:
+            with self.subTest(path=path.relative_to(ROOT)):
+                source = path.read_text(encoding="utf-8")
+                self.assertNotIn("AI-assisted change", source)
+                self.assertNotIn("Human review status:", source)
+                self.assertNotIn("provenance ledger linked from README.md", source)
 
     def test_18s_is_classified_once_with_clearly_labelled_pr2_outputs(self):
         rules = (ROOT / "workflow/rules/02-denoise-and-export-euk.smk").read_text(
