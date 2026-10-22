@@ -17,19 +17,11 @@ USE_PREEXISTING_PR2_DATABASE = config.get(
 )
 USE_INTERNAL_STANDARDS = config.get("use_internal_standards", False)
 
-# SILVA 144 classifiers were built with QIIME 2 2026.7 and scikit-learn 1.7.1.
-# Transparently migrate configs that still point at one of this repository's
-# older bundled QIIME environments. Explicit external environment paths remain
-# under the user's control.
+# Use the bundled definition only when no environment has been specified.
+# An explicit YAML path or installed name is never automatically upgraded.
 DEFAULT_QIIME2_ENV = "../envs/rachis-qiime2-linux-64-2026.7.yml"
 configured_qiime2_env = str(config.get("qiime2version", "")).strip()
-if (
-    not configured_qiime2_env
-    or os.path.basename(configured_qiime2_env) in {
-        "qiime2-amplicon-ubuntu-2024-5-conda.yml",
-        "qiime2-amplicon-ubuntu-2025-7-conda.yml",
-    }
-):
+if not configured_qiime2_env:
     config["qiime2version"] = DEFAULT_QIIME2_ENV
 
 SILVA_VERSION = str(config.get("SILVAversion", "144"))

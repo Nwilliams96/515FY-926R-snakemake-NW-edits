@@ -121,6 +121,37 @@ class DatabaseDagTests(unittest.TestCase):
             self.assertIn("rule ensure_silva_classifier:", output)
             self.assertIn("rule ensure_pr2_classifier:", output)
 
+    def test_explicit_legacy_yaml_sets_real_workflow_classifier_cache_identity(self):
+        for filename in ("qiime2-amplicon-ubuntu-2024-5-conda.yml",
+                         "qiime2-amplicon-ubuntu-2025-7-conda.yml"):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory() as tmp:
+                config = self.setup_project(tmp)
+                definition = Path(tmp) / filename
+                # Deliberately distinct fixture content: no environment is
+                # installed or solved during this workflow dry-run.
+                definition.write_text("name: explicit-legacy-fixture\ndependencies: []\n")
+                config["qiime2version"] = str(definition)
+                snakefile = Path(tmp) / "workflow/Snakefile"
+                snakefile.write_text(snakefile.read_text() + '''
+rule inspect_selected_environment_fixture:
+    input:
+        rules.ensure_silva_classifier.output,
+        rules.ensure_pr2_classifier.output
+    output:
+        "selected-environment-fixture.txt"
+    params:
+        requested=config["qiime2_environment"]["requested"],
+        classifier=PR2_CLASSIFIER
+    shell:
+        "echo {params.requested:q} {params.classifier:q} > {output:q}"
+''')
+                output = self.dry_run(tmp, config, ("inspect_selected_environment_fixture",))
+                identity = hashlib.sha256(definition.read_bytes()).hexdigest()[:12]
+                self.assertIn(str(definition), output)
+                self.assertIn("-" + identity + ".qza", output)
+                self.assertIn("rule train_classifier:", output)
+                self.assertIn("rule train_classifier_pr2:", output)
+
     def test_full_length_training_bypasses_primer_extraction(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self.setup_project(tmp)

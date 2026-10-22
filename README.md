@@ -141,8 +141,10 @@ can omit a checksum but must still pass classifier-artifact validation.
 
 The bundled
 QIIME 2 2026.7 environment matches the version used to train that classifier.
-Older generated configs that still name this repository's bundled QIIME 2
-2024.5 or 2025.7 definition are automatically migrated to the 2026.7 definition.
+The 2026.7 definition is used only when `qiime2version` is missing or blank.
+Explicit YAML paths and installed environment names are respected, including
+the older 2024.5 and 2025.7 definitions. Users must check that their selected
+environment supports the pipeline commands and their supplied classifiers.
 The bundled Linux definition is based on the official QIIME 2 2026.7 file but
 omits Deblur and its obsolete SortMeRNA 2.0 dependency. This workflow uses
 DADA2 exclusively, and excluding that unused dependency prevents Conda solver

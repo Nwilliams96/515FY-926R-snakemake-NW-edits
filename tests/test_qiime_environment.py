@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -14,6 +15,30 @@ SPEC.loader.exec_module(DATABASE)
 
 
 class QiimeEnvironmentTests(unittest.TestCase):
+    def apply_workflow_default(self, config):
+        source = (ROOT / "workflow/rules/common.smk").read_text()
+        block = source[source.index("DEFAULT_QIIME2_ENV ="):source.index("SILVA_VERSION =")]
+        scope = {"config": dict(config), "os": os}
+        exec(compile(block, "common.smk:QIIME-default", "exec"), scope)
+        return scope["config"]["qiime2version"]
+
+    def test_missing_or_blank_workflow_setting_uses_current_default(self):
+        for config in ({}, {"qiime2version": ""}, {"qiime2version": " \t "}):
+            with self.subTest(config=config):
+                self.assertEqual(self.apply_workflow_default(config),
+                                 "../envs/rachis-qiime2-linux-64-2026.7.yml")
+
+    def test_explicit_workflow_environment_is_never_automatically_migrated(self):
+        for setting in (
+            "../envs/qiime2-amplicon-ubuntu-2024-5-conda.yml",
+            "../envs/qiime2-amplicon-ubuntu-2025-7-conda.yml",
+            "/custom/qiime2-amplicon-ubuntu-2024-5-conda.yml",
+            "/custom/qiime2-amplicon-ubuntu-2025-7-conda.yml",
+            "../envs/custom.yml", "../envs/custom.yaml", "qiime2-2024.5",
+        ):
+            with self.subTest(setting=setting):
+                self.assertEqual(self.apply_workflow_default({"qiime2version": setting}), setting)
+
     def packages(self, version="1.7.1"):
         return [dict(name="qiime2", version="2026.7", build_string="py_0", channel="qiime2"),
                 dict(name="scikit-learn", version=version, build_string="py_0", channel="conda-forge")]
