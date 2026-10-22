@@ -259,6 +259,35 @@ misplaced copies are not removed automatically. This fixes downloading, not
 concurrent first-time BBsplit indexing: prepare that shared index once before
 starting several analyses against it.
 
+## QIIME 2 environment selection
+
+`qiime2version` accepts either a YAML environment definition or an installed
+Conda environment name, for example:
+
+```yaml
+qiime2version: "../envs/rachis-qiime2-linux-64-2026.7.yml"
+# Alternatively, select an already installed environment:
+# qiime2version: "qiime2-2026.7"
+```
+
+With YAML, Snakemake reuses its completed matching hash-managed environment
+under `conda_envs_dir`; it does not scan arbitrary installations for matching
+packages. The existing YAML-based classifier-cache identity is unchanged.
+With a name, Conda must be available to the Snakemake controller and the named
+environment must already exist. The workflow resolves that exact prefix and
+fingerprints its Conda/pip package inventory for locally trained classifier
+cache identity. A package version/build change changes that identity. This
+does not install, repair, or validate the environment against a YAML, nor does
+it establish that a supplied classifier is compatible. The requested name,
+resolved prefix, identity and selected recorded software versions appear in
+the report's parameter summary.
+
+For multiple users, prefer the same pinned YAML and shared `conda_envs_dir`
+with appropriate permissions. Prepare environments once and avoid changing
+them while jobs are running. Existing/downloaded SILVA and PR2 classifiers
+must both match the selected QIIME 2/scikit-learn environment. Named inputs
+that are missing or ambiguous fail early without creating an environment.
+
 ## DADA2 controls
 
 The tutorial exposes separate DADA2 settings for the paired 16S path and the

@@ -3,9 +3,13 @@
 """
 
 import hashlib
+import json
 import os
 import re
+import shutil
+import subprocess
 import zipfile
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -21,6 +25,68 @@ SILVA_PRESETS = {
     SILVA_BASE + "full-length/uniform/" + SILVA_FULL_NAME:
         (SILVA_FULL_NAME, "e16b9bc78dafa2f344563e570bbf25ba"),
 }
+
+
+def resolve_qiime_environment(specification, source_path):
+    """Resolve YAML or an installed name without creating or changing an env."""
+    specification = str(specification).strip()
+    if specification.endswith((".yaml", ".yml")):
+        try:
+            content = Path(source_path(specification)).read_bytes()
+        except OSError as error:
+            raise ValueError(f"Cannot read QIIME 2 environment YAML: {specification}") from error
+        # Preserve existing YAML-based classifier cache names exactly.
+        return dict(kind="yaml", requested=specification, specification=specification,
+                    identity=hashlib.sha256(content).hexdigest()[:12])
+
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", specification):
+        raise ValueError("qiime2version must be a .yaml/.yml file or an installed Conda environment name")
+    conda = os.environ.get("CONDA_EXE") or shutil.which("conda")
+    if not conda:
+        raise ValueError("Conda is unavailable; provide a QIIME 2 YAML file or make Conda available to resolve the environment name")
+
+    def conda_json(*arguments):
+        try:
+            result = subprocess.run([conda, *arguments], check=True, capture_output=True,
+                                    text=True, timeout=30)
+            return json.loads(result.stdout)
+        except (OSError, subprocess.SubprocessError, ValueError) as error:
+            raise ValueError(f"Cannot inspect Conda environment {specification!r}; check Conda availability and permissions") from error
+
+    info = conda_json("info", "--json")
+    if not isinstance(info, dict):
+        raise ValueError("Conda returned an invalid environment inventory")
+    prefixes = info.get("envs", [])
+    if not isinstance(prefixes, list):
+        raise ValueError("Conda returned an invalid environment list")
+    candidates = {str(Path(prefix).resolve()) for prefix in prefixes
+                  if isinstance(prefix, str) and Path(prefix).name == specification}
+    if specification == "base" and info.get("root_prefix"):
+        candidates = {str(Path(info["root_prefix"]).resolve())}
+    if len(candidates) != 1:
+        reason = "was not found" if not candidates else "is ambiguous across Conda prefixes"
+        raise ValueError(f"QIIME 2 Conda environment {specification!r} {reason}; use a YAML definition instead")
+    prefix = candidates.pop()
+    if not Path(prefix, "conda-meta").is_dir():
+        raise ValueError(f"QIIME 2 environment is not an installed Conda prefix: {prefix}")
+    packages = conda_json("list", "--prefix", prefix, "--json")
+    if not isinstance(packages, list) or not packages or any(
+        not isinstance(package, dict) or not package.get("name") or not package.get("version")
+        for package in packages
+    ):
+        raise ValueError(f"Cannot fingerprint installed packages in QIIME 2 environment {specification!r}")
+    # Normalize ordering and omit machine-specific paths from the fingerprint.
+    # Include Conda and pip inventory entries; a name alone is not a recipe.
+    inventory = sorted([
+        {key: package.get(key, "") for key in ("name", "version", "build_string", "channel", "platform")}
+        for package in packages
+    ], key=lambda package: json.dumps(package, sort_keys=True))
+    identity = "named-" + hashlib.sha256(json.dumps(inventory, sort_keys=True).encode()).hexdigest()[:12]
+    versions = {package["name"]: package["version"] for package in packages
+                if package["name"] in {"qiime2", "scikit-learn", "q2-dada2", "q2-feature-classifier", "rescript"}}
+    # Activate the exact prefix inspected above, avoiding later name ambiguity.
+    return dict(kind="named", requested=specification, specification=prefix,
+                identity=identity, software_versions=versions)
 
 
 def reusable_classifier(path, expected_md5=None):

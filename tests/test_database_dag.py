@@ -8,12 +8,14 @@ import importlib.util
 import itertools
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 
@@ -97,6 +99,27 @@ class DatabaseDagTests(unittest.TestCase):
                         self.assertEqual(download in output, mode == "download", output)
                         self.assertEqual(train in output, mode == "train", output)
                         self.assertEqual(extract in output, mode == "train", output)
+
+    def test_named_qiime_environment_parses_the_real_workflow_without_a_yaml_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = self.setup_project(tmp)
+            for family in ("SILVA", "PR2"):
+                self.set_mode(tmp, config, family, "existing")
+            prefix = Path(tmp) / "envs/qiime-fixture"
+            (prefix / "conda-meta").mkdir(parents=True)
+            conda = Path(tmp) / "fixture-conda"
+            conda.write_text(
+                "#!" + sys.executable + "\nimport json, sys\n"
+                + "print(json.dumps(" + repr({"envs": [str(prefix)]}) + ") if sys.argv[1] == 'info' else "
+                + "json.dumps([{'name': 'qiime2', 'version': '2026.7'}, "
+                + "{'name': 'scikit-learn', 'version': '1.7.1'}]))\n"
+            )
+            conda.chmod(0o700)
+            config["qiime2version"] = "qiime-fixture"
+            with mock.patch.dict(os.environ, {"CONDA_EXE": str(conda)}):
+                output = self.dry_run(tmp, config)
+            self.assertIn("rule ensure_silva_classifier:", output)
+            self.assertIn("rule ensure_pr2_classifier:", output)
 
     def test_full_length_training_bypasses_primer_extraction(self):
         with tempfile.TemporaryDirectory() as tmp:

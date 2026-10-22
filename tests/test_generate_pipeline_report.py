@@ -12,6 +12,16 @@ SPEC.loader.exec_module(REPORT)
 
 
 class GeneratePipelineReportTests(unittest.TestCase):
+    def test_qiime_environment_identity_and_name_are_in_parameter_rows(self):
+        rows = dict(REPORT.flatten_config({"qiime2_environment": {
+            "kind": "named", "requested": "qiime-2026.7",
+            "specification": "/shared/envs/qiime", "identity": "named-abc123",
+            "software_versions": {"scikit-learn": "1.7.1"},
+        }}))
+        self.assertEqual(rows["qiime2_environment.requested"], "qiime-2026.7")
+        self.assertEqual(rows["qiime2_environment.specification"], "/shared/envs/qiime")
+        self.assertEqual(rows["qiime2_environment.software_versions.scikit-learn"], "1.7.1")
+
     def test_database_sources_are_reported_as_declared_and_escaped(self):
         rendered = REPORT.database_resources_table({
             "database_resources": {

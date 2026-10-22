@@ -176,17 +176,25 @@ BBSPLIT_DB_DIR = os.path.join(DATABASE_DIR, "bbsplit-db", "EUK-PROK-bbsplit-db")
 
 # This small module resolves configuration only. All preparation commands
 # remain visible in prepare_classification_dbs.smk.
-import hashlib
 import importlib.util
 database_spec = importlib.util.spec_from_file_location(
     "easv_database_config", str(workflow.source_path("../scripts/database_config.py"))
 )
 database_config = importlib.util.module_from_spec(database_spec)
 database_spec.loader.exec_module(database_config)
-with open(workflow.source_path(config["qiime2version"]), "rb") as environment_file:
-    environment_id = hashlib.sha256(environment_file.read()).hexdigest()[:12]
-database_settings = dict(config, _database_environment_id=environment_id)
 try:
+    qiime_specification = config["qiime2version"]
+    # Resolve relative YAML paths here, in the rule file's source context.
+    qiime_definition = (
+        workflow.source_path(qiime_specification)
+        if qiime_specification.endswith((".yaml", ".yml")) else None
+    )
+    qiime_environment = database_config.resolve_qiime_environment(
+        qiime_specification, lambda specification: qiime_definition
+    )
+    config["qiime2version"] = qiime_environment["specification"]
+    config["qiime2_environment"] = qiime_environment
+    database_settings = dict(config, _database_environment_id=qiime_environment["identity"])
     DATABASE_RESOURCES = {
         family: database_config.resolve_database(database_settings, family)
         for family in ("SILVA", "PR2")
