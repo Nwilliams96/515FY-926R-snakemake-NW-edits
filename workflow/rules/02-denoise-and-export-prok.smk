@@ -223,7 +223,7 @@ rule export_unmerged_16S_PR2_taxonomy:
 
 rule normalize_unmerged_16S_PR2_rank_prefixes:
     input:
-        taxonomy=rules.export_unmerged_16S_PR2_taxonomy.output
+        taxonomy=rules.export_unmerged_16S_PR2_taxonomy.output[0]
     output:
         normalized=temp(".snakemake/classification-exports/unmerged-16S/PR2/taxonomy.tsv")
     log:
@@ -265,10 +265,10 @@ rule convert_unmerged_16S_standard_biom:
 
 rule export_unmerged_16S_supplement:
     input:
-        retained_table_tsv=rules.convert_unmerged_16S_retained_biom.output,
-        standard_table_tsv=rules.convert_unmerged_16S_standard_biom.output,
-        sequence_fasta=rules.export_unmerged_16S_sequences.output,
-        silva_export=rules.export_unmerged_16S_SILVA_taxonomy.output,
+        retained_table_tsv=rules.convert_unmerged_16S_retained_biom.output[0],
+        standard_table_tsv=rules.convert_unmerged_16S_standard_biom.output[0],
+        sequence_fasta=rules.export_unmerged_16S_sequences.output[0],
+        silva_export=rules.export_unmerged_16S_SILVA_taxonomy.output[0],
         pr2_export=rules.normalize_unmerged_16S_PR2_rank_prefixes.output.normalized,
     output:
         table=UNMERGED_16S_TABLE,
@@ -399,7 +399,7 @@ rule export_PR2_taxonomy_for_plastid_resolution:
 
 rule normalize_canonical_16S_PR2_rank_prefixes:
     input:
-        taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output
+        taxonomy=rules.export_PR2_taxonomy_for_plastid_resolution.output[0]
     output:
         normalized=temp(".snakemake/classification-exports/canonical-16S/PR2/taxonomy.tsv")
     log:
@@ -413,7 +413,7 @@ rule normalize_canonical_16S_PR2_rank_prefixes:
 
 rule resolve_PR2_plastids:
     input:
-        silva_taxonomy=rules.export_SILVA_taxonomy_for_plastid_resolution.output,
+        silva_taxonomy=rules.export_SILVA_taxonomy_for_plastid_resolution.output[0],
         pr2_taxonomy=rules.normalize_canonical_16S_PR2_rank_prefixes.output.normalized,
     output:
         taxonomy_tsv=temp("results/02-proks/09-subsetting/tax-merged/" + config["studyName"] + ".PR2-plastid-resolved-taxonomy.tsv"),

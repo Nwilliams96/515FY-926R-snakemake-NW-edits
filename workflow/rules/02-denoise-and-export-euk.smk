@@ -177,7 +177,7 @@ rule export_18S_PR2_taxonomy_for_normalization:
 
 rule normalize_18S_PR2_rank_prefixes:
     input:
-        taxonomy=rules.export_18S_PR2_taxonomy_for_normalization.output
+        taxonomy=rules.export_18S_PR2_taxonomy_for_normalization.output[0]
     output:
         normalized=temp(".snakemake/classification-exports/18S/PR2/taxonomy.tsv")
     log:

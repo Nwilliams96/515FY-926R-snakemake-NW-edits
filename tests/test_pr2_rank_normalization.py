@@ -2,6 +2,9 @@
 
 import csv
 import importlib.util
+import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,6 +29,46 @@ def rule_body(source, name):
 
 
 class Pr2RankNormalizationTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("snakemake"), "Snakemake is not installed")
+    def test_real_snakemake_entrypoint_receives_one_path_in_all_three_branches(self):
+        for source, normalization, exported, raw_path in (
+            (PROK_RULES, "normalize_unmerged_16S_PR2_rank_prefixes", "export_unmerged_16S_PR2_taxonomy",
+             ".snakemake/classification-exports/unmerged-16S/PR2-raw/taxonomy.tsv"),
+            (PROK_RULES, "normalize_canonical_16S_PR2_rank_prefixes", "export_PR2_taxonomy_for_plastid_resolution",
+             ".snakemake/classification-exports/canonical-16S/PR2-raw/taxonomy.tsv"),
+            (EUK_RULES, "normalize_18S_PR2_rank_prefixes", "export_18S_PR2_taxonomy_for_normalization",
+             ".snakemake/classification-exports/18S/PR2-raw/taxonomy.tsv"),
+        ):
+            with self.subTest(branch=normalization), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                raw = root / raw_path
+                raw.parent.mkdir(parents=True)
+                raw.write_text(
+                    "Feature ID\tTaxon\tConfidence\n"
+                    "001\td__Eukaryota;sgr__Archaeplastida:plas\t0.8000\n"
+                )
+                body = rule_body(source, normalization).replace(
+                    '"../scripts/normalize_pr2_taxonomy.py"', repr(str(SCRIPT))
+                )
+                target = re.search(r'normalized=temp\("([^"]+)"\)', body)[1]
+                # The export fixture is already complete. Only the actual
+                # normalization rule and its real script may execute here.
+                (root / "Snakefile").write_text(
+                    f'rule {exported}:\n    output:\n        {raw_path!r}\n'
+                    '    shell:\n        "exit 99"\n\n'
+                    f'rule {normalization}:' + body
+                )
+                process = subprocess.run(
+                    [sys.executable, "-m", "snakemake", "--snakefile", "Snakefile",
+                     "--cores", "1", "--nolock", "--notemp", "--shared-fs-usage",
+                     "input-output", "persistence", "--", target],
+                    cwd=root, text=True, capture_output=True, timeout=60,
+                )
+                self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+                self.assertEqual((root / target).read_text(),
+                                 "Feature ID\tTaxon\tConfidence\n"
+                                 "001\tEukaryota;Archaeplastida:plas\t0.8000\n")
+
     def test_normalization_preserves_confidence_ids_and_extra_columns(self):
         # Nine-rank fixture includes an organelle marker and an internal d__
         # substring that is part of a name, not an actual rank prefix.
@@ -114,7 +157,7 @@ class Pr2RankNormalizationTests(unittest.TestCase):
             (EUK_RULES, "normalize_18S_PR2_rank_prefixes", "export_18S_PR2_taxonomy_for_normalization"),
         ):
             body = rule_body(source, normalization)
-            self.assertIn(f"rules.{exported}.output", body)
+            self.assertIn(f"taxonomy=rules.{exported}.output[0]", body)
             self.assertIn('"../scripts/normalize_pr2_taxonomy.py"', body)
             self.assertNotIn("qiime rescript edit-taxonomy", body)
         self.assertIn("rules.classify_all_16S_with_PR2.output.classified", rule_body(PROK_RULES, "export_PR2_taxonomy_for_plastid_resolution"))
