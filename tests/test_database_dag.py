@@ -152,6 +152,33 @@ rule inspect_selected_environment_fixture:
                 self.assertIn("rule train_classifier:", output)
                 self.assertIn("rule train_classifier_pr2:", output)
 
+    def test_current_internal_standard_lists_connect_the_full_results_dag(self):
+        for ids in (["BP"], ["BP", "DR"], ["Custom-A", "Custom_B", "SpikeIn3", "SpikeIn4"]):
+            with self.subTest(ids=ids), tempfile.TemporaryDirectory() as tmp:
+                config = self.setup_project(tmp)
+                config.update(use_internal_standards=True, intstds=ids)
+                for family in ("SILVA", "PR2"):
+                    self.set_mode(tmp, config, family, "existing")
+                (Path(tmp) / "config/samples.tsv").write_text(
+                    "sample\t" + "\t".join(id + "_ng" for id in ids) + "\n"
+                    + "001\t" + "\t".join("1" for id in ids) + "\n"
+                )
+                (Path(tmp) / "config/internal_stds.tsv").write_text(
+                    "internal_std_ID\trRNA_copy_number\tgenome_len_bp\tfull_SSU_sequence\n"
+                    + "".join(f"{id}\t1\t100\tACGT\n" for id in ids)
+                )
+                raw = Path(config["rawdatadir"])
+                raw.mkdir()
+                for direction in ("R1", "R2"):
+                    (raw / ("001." + direction + ".fastq.gz")).touch()
+                output = self.dry_run(tmp, config, ("all",))
+                for rule in ("prepare_internal_standard_fastas", "intstd_correct_data",
+                             "generate_pipeline_report", "export_results_for_download"):
+                    self.assertIn("rule " + rule + ":", output)
+                self.assertIn("DAG-fixture." + "_".join(ids) + ".ISD_corrected_long_data.tsv", output)
+                for id in ids:
+                    self.assertIn("config/intstd_fastas/" + id + ".fasta", output)
+
     def test_full_length_training_bypasses_primer_extraction(self):
         with tempfile.TemporaryDirectory() as tmp:
             config = self.setup_project(tmp)
