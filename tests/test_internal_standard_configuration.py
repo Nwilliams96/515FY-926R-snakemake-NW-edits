@@ -12,7 +12,7 @@ COMMON = (ROOT / "workflow/rules/common.smk").read_text()
 
 class InternalStandardConfigurationTests(unittest.TestCase):
     def resolve(self, config):
-        block = COMMON[COMMON.index("configured_intstds ="):COMMON.index("NEW_AMPLICON_CONCENTRATIONS_FILE =")]
+        block = COMMON[COMMON.index('INTERNAL_STANDARD_IDS = config.get("intstds", [])'):COMMON.index("NEW_AMPLICON_CONCENTRATIONS_FILE =")]
         scope = dict(config=dict(studyName="fixture", **config),
                      USE_INTERNAL_STANDARDS=config.get("use_internal_standards", False),
                      WorkflowError=WorkflowError, re=re, combinations=combinations)
@@ -38,9 +38,10 @@ class InternalStandardConfigurationTests(unittest.TestCase):
                                     f"median_{'_'.join(ids)}_recovery_ratio"]
                                  + [f"mean_{a}_and_{b}_recovery_ratio" for a,b in combinations(ids,2)])
 
-    def test_list_entries_are_trimmed_and_converted_to_text(self):
-        result = self.resolve(dict(use_internal_standards=True, intstds=[" BP ", "\tDR", 123]))
-        self.assertEqual(result["INTERNAL_STANDARD_IDS"], ["BP", "DR", "123"])
+    def test_configured_list_is_used_directly_without_a_normalization_copy(self):
+        ids = ["Custom-A", "Custom_B", "001"]
+        result = self.resolve(dict(use_internal_standards=True, intstds=ids))
+        self.assertIs(result["INTERNAL_STANDARD_IDS"], ids)
 
     def test_missing_or_empty_list_remains_valid_when_standards_are_disabled(self):
         for config in ({}, {"use_internal_standards": False},
@@ -48,21 +49,14 @@ class InternalStandardConfigurationTests(unittest.TestCase):
             with self.subTest(config=config):
                 self.assertEqual(self.resolve(config)["INTERNAL_STANDARD_IDS"], [])
 
-    def test_legacy_mappings_and_other_nonlist_types_fail_clearly(self):
-        for value in ({"intstd1": "BP", "intstd2": "DR"}, {}, "BP", None, 1, ("BP",)):
-            for enabled in (True, False):
-                with self.subTest(value=value, enabled=enabled), self.assertRaisesRegex(
-                    WorkflowError, "intstds must be an ordered list of internal-standard IDs"
-                ):
-                    self.resolve(dict(use_internal_standards=enabled, intstds=value))
-
     def test_enabled_standards_still_require_nonempty_unique_safe_ids(self):
         for config, message in (
             ({"use_internal_standards": True}, "does not contain any IDs"),
             ({"use_internal_standards": True, "intstds": []}, "does not contain any IDs"),
             ({"use_internal_standards": True, "intstds": [""]}, "may contain only"),
             ({"use_internal_standards": True, "intstds": ["bad name"]}, "may contain only"),
-            ({"use_internal_standards": True, "intstds": ["BP", " BP "]}, "must be unique"),
+            ({"use_internal_standards": True, "intstds": [" BP "]}, "may contain only"),
+            ({"use_internal_standards": True, "intstds": ["BP", "BP"]}, "must be unique"),
         ):
             with self.subTest(config=config), self.assertRaisesRegex(WorkflowError, message):
                 self.resolve(config)
