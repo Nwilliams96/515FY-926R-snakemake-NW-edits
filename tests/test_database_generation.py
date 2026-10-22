@@ -1,5 +1,7 @@
+from contextlib import chdir
 import importlib.util
 import hashlib
+import os
 import re
 import tempfile
 import unittest
@@ -109,8 +111,8 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("c4a396035271db516a0054f1d750d3081ca5a11831b44756e91590a79ed0f109", downloads)
         self.assertRegex(classification, r'script:\s+"\.\./scripts/download_verified_reference\.py"')
         self.assertIn("USE_PREEXISTING_BBSPLIT_DATABASE", common)
-        self.assertIn("USE_PREEXISTING_SILVA_DATABASE", common)
-        self.assertIn("USE_PREEXISTING_PR2_DATABASE", common)
+        self.assertNotIn("USE_PREEXISTING_SILVA_DATABASE", common)
+        self.assertNotIn("USE_PREEXISTING_PR2_DATABASE", common)
         snakefile = (ROOT / "workflow/Snakefile").read_text(encoding="utf-8")
         self.assertIn("if not USE_PREEXISTING_BBSPLIT_DATABASE:", snakefile)
 
@@ -441,7 +443,10 @@ class DatabaseGenerationTests(unittest.TestCase):
             ROOT / "workflow/rules/05-internal-standard-correction.smk"
         ).read_text(encoding="utf-8")
         self.assertIn("prok_and_euk_SSU_amplicon_molarities.tsv", common)
-        self.assertIn("LEGACY_AMPLICON_CONCENTRATIONS_FILE", common)
+        for removed in ("NEW_AMPLICON_CONCENTRATIONS_FILE",
+                        "PREVIOUS_AMPLICON_CONCENTRATIONS_FILE",
+                        "LEGACY_AMPLICON_CONCENTRATIONS_FILE"):
+            self.assertNotIn(removed, common)
         self.assertIn("amplicon_concentrations=AMPLICON_CONCENTRATIONS_FILE", merge_rule)
         self.assertIn("correction_factors=", merge_rule)
         self.assertIn('f"{standard_id}_recovery_ratio"', common)
@@ -450,6 +455,26 @@ class DatabaseGenerationTests(unittest.TestCase):
         self.assertIn("filtered=ISD_FILTERED_LONG_TABLE", correction_rule)
         self.assertIn("RESULTS_LONG_DATA = (", common)
         self.assertIn("ISD_FILTERED_LONG_TABLE", common)
+
+    def test_current_molarity_filename_is_selected_even_when_legacy_files_exist(self):
+        source = (ROOT / "workflow/rules/common.smk").read_text(encoding="utf-8")
+        start = source.index("\nAMPLICON_CONCENTRATIONS_FILE =") + 1
+        block = source[start:source.index("# Keep shared supporting resources", start)]
+        with tempfile.TemporaryDirectory() as tmp, chdir(tmp):
+            config_dir = Path("config")
+            config_dir.mkdir()
+            for filename in ("bioanalyzer.tsv", "prok_and_euk_SSU_amplicon_concentrations.tsv"):
+                (config_dir / filename).write_text("legacy fixture\n", encoding="utf-8")
+            for current_exists in (False, True):
+                with self.subTest(current_exists=current_exists):
+                    if current_exists:
+                        (config_dir / "prok_and_euk_SSU_amplicon_molarities.tsv").touch()
+                    scope = {"os": os}
+                    exec(compile(block, "common.smk:molarity-file", "exec"), scope)
+                    self.assertEqual(
+                        scope["AMPLICON_CONCENTRATIONS_FILE"],
+                        "config/prok_and_euk_SSU_amplicon_molarities.tsv",
+                    )
 
     def test_reformats_pr2_fasta_without_appending_stale_outputs(self):
         with tempfile.TemporaryDirectory() as tmp:

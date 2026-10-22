@@ -262,6 +262,13 @@ rule inspect_selected_environment_fixture:
                 supplement,
             )
             self.assertNotIn("/sequences/dna-sequences.fasta", supplement)
+            report = output.split("rule generate_pipeline_report:", 1)[1].split("output:", 1)[0]
+            self.assertIn("DAG-fixture.unmerged_linked_16S_summary.tsv", report)
+            export = output.split("rule export_results_for_download:", 1)[1].split("log:", 1)[0]
+            for filename in ("DAG-fixture.unmerged_linked_16S.tsv",
+                             "DAG-fixture.unmerged_linked_16S_summary.tsv"):
+                self.assertIn("results/02-proks/11-unmerged-16S-rescue/" + filename, export)
+                self.assertIn("DAG-fixture-Results-Export/" + filename, export)
             euk_export = output.split("rule export_tax_convert_biom_euk:", 1)[1].split("output:", 1)[0]
             self.assertIn("DAG-fixture_PR2.normalized.classified.qza", euk_export)
             self.assertIn("rule assign_SILVA_species:", output)

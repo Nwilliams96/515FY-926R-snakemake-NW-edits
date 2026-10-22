@@ -25,7 +25,11 @@ class Dada2ConfigurationTests(unittest.TestCase):
         ):
             self.assertIn(setting, common)
 
-        self.assertIn("RUN_UNMERGED_16S_RESCUE = True", common)
+        self.assertNotIn("RUN_UNMERGED_16S_RESCUE", common)
+        report_rules = (ROOT / "workflow/rules/06-generate-report.smk").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("RUN_UNMERGED_16S_RESCUE", report_rules)
         self.assertNotIn('DADA2_PROK["retain_unmerged"]', common)
 
     def test_configurable_values_reach_both_dada2_commands(self):

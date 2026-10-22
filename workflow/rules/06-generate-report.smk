@@ -1,14 +1,12 @@
 INTERNAL_STANDARD_REPORT_FIGURES = []
 INTERNAL_STANDARD_REPORT_TABLE = []
-UNMERGED_16S_REPORT_SUMMARY = []
+UNMERGED_16S_REPORT_SUMMARY = [UNMERGED_16S_SUMMARY]
 if USE_INTERNAL_STANDARDS:
     INTERNAL_STANDARD_REPORT_FIGURES = [
         rules.intstd_correct_data.output.recovery_plot_png,
         rules.intstd_correct_data.output.domain_plot_png,
     ]
     INTERNAL_STANDARD_REPORT_TABLE = [rules.intstd_correct_data.output.corrected]
-if RUN_UNMERGED_16S_RESCUE:
-    UNMERGED_16S_REPORT_SUMMARY = [UNMERGED_16S_SUMMARY]
 
 
 rule generate_pipeline_report:
